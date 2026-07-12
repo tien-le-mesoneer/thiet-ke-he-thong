@@ -1,109 +1,102 @@
-# System-Design Acceptance Criteria
+# System-Design Acceptance Criteria (concept-level)
 
-Machine-checkable "definition of done" per week. The `learn-sd` skill reads this
-file in its `this-week` build step, runs each check with the tool named, and
-shows a green/red list. A week's `plan_week` only advances when its criteria are
-green (or you explicitly override).
+Machine-checkable "definition of done" per week, expressed as **language-agnostic
+concepts** with stable IDs (e.g. `W3.pessimistic`). Each concept is verified
+against whichever implementation you're currently building via that app's
+manifest: `apps/<impl>/acceptance.<lang>.md` maps every concept ID here to a
+concrete check (a grep pattern, a codegraph symbol, a test command) for that
+language.
+
+The `learn-sd` skill, in its `this-week` build step, reads `active_impl` from
+`system-design-progress.md`, loads the matching manifest, and runs each concept's
+concrete check — showing a green/red list. A week's `plan_week` advances only
+when its non-`self` concepts are green (or you explicitly override).
 
 Companion to `system-design-plan-detailed.md` (the syllabus). The plan says what
-to build; this file says how we *verify* it was built.
+to build; this file says *which concepts prove it was built*; the manifest says
+*how to check them in language X*.
 
-## Check types
+## Check types (how a manifest verifies a concept)
 
 | Tag | Verified by | Notes |
 |-----|-------------|-------|
-| `codegraph` | `codegraph_search` / `codegraph_callers` / `codegraph_impact` | structural — does the symbol/edge exist |
-| `grep` | ripgrep over the tree | literal text: SQL fragments, headers, markers |
-| `test` | `npm test` | behavioral — does it actually work |
-| `typecheck` | `npm run typecheck` | compiles clean |
-| `file` | path exists | an artifact was produced (script, spec, migration) |
-| `git` | `git tag` / `git log` | milestone tags and commits |
-| `self` | you answer honestly | whiteboard/interview recall — no tool can check this |
-
-`self` items are checkpoints, not gates — the skill asks them but never blocks on them.
+| `codegraph` | `codegraph_search` / `codegraph_callers` / `codegraph_impact` | structural — symbol/edge exists (works across Go/Java/TS via tree-sitter) |
+| `grep` | ripgrep | literal text: SQL fragments, headers, markers |
+| `test` | the app's test runner (`npm test` / `go test` / `./gradlew test`) | behavioral — it actually works |
+| `build` | the app's compiler (`npm run typecheck` / `go build` / `./gradlew build`) | compiles clean |
+| `file` | path exists | an artifact was produced |
+| `git` | `git tag` / `git log` | milestone tags |
+| `self` | you answer honestly | whiteboard/interview recall — asked, never a gate |
 
 ---
 
 ## Phase 1 — Foundations (Weeks 1–4)
 
-Project: the modular monolith in this repo (`deliveroo-lite`).
+Project: a modular-monolith food-delivery clone (`deliveroo-*`), one implementation
+per language under `apps/`.
 
-### Week 1 — Scaffold
-Concept: reliability/maintainability basics; clean module boundaries from day one.
+### Week 1 — Scaffold  ·  concept: reliability/maintainability + clean module boundaries
+- `W1.health` — a health endpoint exists
+- `W1.config` — configuration via env + container setup (compose)
+- `W1.logging` — structured logging wired from day one
+- `W1.modules` — four module boundaries present: `users`, `catalog`, `orders`, `payments`
+- `W1.migrations` — schema migrations run cleanly
+- `W1.build` — the app compiles/typechecks clean
+- `W1.recall` (`self`) — reliability/scalability/maintainability trade-offs in your design (DDIA ch. 1)
 
-- [ ] `grep` — health endpoint exists (`/health` route in `src/index.ts`)
-- [ ] `file` — config via env (`src/config.ts`) and container setup (`compose.yaml`)
-- [ ] `grep` — structured logging wired (pino in `src/index.ts` / `package.json`)
-- [ ] `codegraph` — four module boundaries present: `users`, `catalog`, `orders`, `payments` under `src/modules/`
-- [ ] `file` — migrations run cleanly (`migrations/001_init.sql`, `scripts/migrate.ts`)
-- [ ] `typecheck` — `npm run typecheck` passes
-- [ ] `self` — can you name the reliability/scalability/maintainability trade-offs in your own design (DDIA ch. 1)?
+### Week 2 — Order flow + explicit state machine + tests  ·  concept: encoding & workflow modeling
+- `W2.state-machine` — an explicit order state machine exists (allowed transitions declared in one place)
+- `W2.enforced` — transitions are **enforced**: every status write goes through the transition guard (not set directly)
+- `W2.tests-exist` — an order-flow integration test exists
+- `W2.flow` (`test`) — place order → reserve items → fake payment → status transition passes
+- `W2.recall` (`self`) — JSON vs Protobuf vs Avro + one schema-evolution rule (DDIA ch. 4)
 
-### Week 2 — Order flow + explicit state machine + tests
-Concept: encoding & schema evolution; modeling a workflow explicitly.
+### Week 3 — Race-condition lab  ·  concept: partitioning + isolation & write skew
+- `W3.pessimistic` — pessimistic lock path on the inventory decrement (row lock / `SELECT … FOR UPDATE` equivalent)
+- `W3.optimistic` — optimistic lock path (version column + conditional update + retry)
+- `W3.serializable` — serializable-isolation path with retry on serialization failure
+- `W3.version-col` — migration adds a `version` column to the inventory table
+- `W3.benchmark` (`file`) — a benchmark comparing all three, with recorded numbers
+- `W3.marker-resolved` (`grep`) — the Week-3 race-condition marker in the code is resolved/removed
+- `W3.tests` (`test`) — order-flow tests still pass under the new locking
+- `W3.recall` (`self`) — pick an isolation level for a given anomaly; justify a partitioning key (DDIA ch. 6–7)
 
-- [ ] `codegraph` — explicit state machine exists (`canTransition` / `TRANSITIONS` in `src/modules/orders/service.ts`)
-- [ ] `codegraph` — transitions are **enforced**, not just declared: status writes in `placeOrder` go through `canTransition` (currently `placeOrder` sets `PAYMENT_PENDING`/`PAID`/`CANCELLED` directly — this box is OPEN until guarded)
-- [ ] `file` — a `test/` directory with an order-flow integration test exists
-- [ ] `test` — `npm test` passes: place order → reserve items → fake payment → status transition
-- [ ] `self` — can you explain JSON vs Protobuf vs Avro and one schema-evolution rule (DDIA ch. 4)?
-
-### Week 3 — Race-condition lab (interview gold)
-Concept: partitioning/hot keys; transaction isolation & write skew.
-
-- [ ] `grep`/`codegraph` — pessimistic lock path: `SELECT ... FOR UPDATE` in the inventory decrement
-- [ ] `grep`/`codegraph` — optimistic lock path: `UPDATE ... SET stock = stock - $q, version = version + 1 WHERE id = $id AND version = $v`
-- [ ] `grep` — serializable path: `SET TRANSACTION ISOLATION LEVEL SERIALIZABLE` + retry on `40001`
-- [ ] `grep` — migration adds a `version` column to `catalog.menu_items`
-- [ ] `file` — benchmark script comparing all three (e.g. `scripts/bench-locking.ts`) with recorded numbers
-- [ ] `grep` — the `⚠️ Week 3 lab` marker at `src/modules/orders/service.ts:42` is resolved/removed
-- [ ] `test` — order-flow tests still pass under the new locking
-- [ ] `self` — can you pick an isolation level for a given anomaly and justify a partitioning key (DDIA ch. 6–7)?
-
-### Week 4 — Polish + idempotency (Phase 1 milestone)
-Concept: distributed failures; consistency & consensus (the hard chapters).
-
-- [ ] `codegraph` — idempotent order creation: repeated `idempotency-key` returns the existing order (`placeOrder` in `service.ts` already reads the key — verify a test proves replay returns the same row, no double charge)
-- [ ] `grep` — pagination on list endpoints (limit/offset or cursor in `catalog`/`orders` routes)
-- [ ] `file` — OpenAPI spec present (`openapi.yaml` or generated equivalent)
-- [ ] `file` — seed script (`scripts/seed.ts`)
-- [ ] `test` — `npm test` green including an idempotency-replay test
-- [ ] `git` — tag `v1-monolith` exists
-- [ ] `self` — **Checkpoint:** explain replication-lag anomalies; pick an isolation level for a given bug; justify a partitioning key (DDIA ch. 5/6/9)
+### Week 4 — Polish + idempotency  ·  concept: distributed failures; consistency & consensus
+- `W4.idempotent` — repeated idempotency-key returns the existing order, no double charge (proven by a replay test)
+- `W4.pagination` — list endpoints paginate (limit/offset or cursor)
+- `W4.openapi` (`file`) — an OpenAPI spec is present
+- `W4.seed` (`file`) — a seed script exists
+- `W4.tests` (`test`) — suite green including the idempotency-replay test
+- `W4.tag` (`git`) — milestone tag `v1-monolith` exists (or `v1-monolith-<lang>` per impl)
+- `W4.checkpoint` (`self`) — explain replication-lag anomalies; pick an isolation level for a bug; justify a partitioning key (DDIA ch. 5/6/9)
 
 ---
 
 ## Phase 2 — Decomposition & Communication (Weeks 5–8)
 
-> Criteria filled in on arrival — service topology and infra (gRPC, Kafka, gateway)
-> aren't built yet, so pinning exact checks now would be guesswork. Anchor checks
-> that will hold regardless:
-
-- Week 5 — `file` ADR justifying service boundaries (`docs/adr/`); `payments` extracted to its own schema + REST API
-- Week 6 — `orders` extracted; gRPC contract (`.proto`) between orders → payments; no cross-service DB joins
-- Week 7 — Kafka/NATS events (`OrderPlaced`, `PaymentCompleted`); `grep` transactional outbox table + publisher
-- Week 8 — API gateway routing/auth; consumer-driven contract test; `self` — argue when *not* to extract a service
-- `git` — Phase 2 checkpoint tag when 3 services + gateway + event bus run on compose
+> Concepts filled in on arrival (infra not built yet). Anchor concepts:
+- `W5.adr-boundaries` (`file`), `W5.payments-extracted` — payments its own service + schema + REST
+- `W6.orders-extracted`, `W6.grpc-contract` — `.proto` contract orders → payments; no cross-service DB joins
+- `W7.events`, `W7.outbox` (`grep`) — `OrderPlaced`/`PaymentCompleted`; transactional outbox table + publisher
+- `W8.gateway`, `W8.contract-test`; `W8.recall` (`self`) — argue when *not* to extract a service
 
 ## Phase 3 — Distributed Data & Resilience (Weeks 9–12)
 
-> Filled in on arrival. Anchor checks:
-
-- Week 9 — choreography saga with compensating actions; failure paths tested
-- Week 10 — orchestration saga variant + a written comparison doc (`docs/`)
-- Week 11 — CQRS read model consuming events; Redis cache with documented invalidation
-- Week 12 — timeouts/retries+jitter/circuit-breaker/DLQ; hand chaos test (kill payments mid-saga → no lost/dup orders)
-- `file` — ADRs for saga style, CQRS, caching; `self` — saga vs 2PC from memory
+> Anchor concepts:
+- `W9.choreography-saga` — compensating actions; failure paths tested
+- `W10.orchestration-saga` + `W10.comparison` (`file`)
+- `W11.cqrs-read-model`, `W11.cache-invalidation`
+- `W12.resilience` (timeouts/retries+jitter/circuit-breaker/DLQ) + `W12.chaos` (kill mid-saga → no lost/dup orders)
+- `W12.adrs` (`file`); `W12.recall` (`self`) — saga vs 2PC from memory
 
 ## Phase 4 — Operations & Architect Skills (Weeks 13–16)
 
-> Filled in on arrival. Anchor checks:
-
-- Week 13 — local K8s (kind/k3d) manifests/probes for all services
-- Week 14 — OpenTelemetry trace spanning the saga; Prometheus/Grafana dashboard
-- Week 15 — k6 load test with before/after bottleneck numbers; HPA scaling
-- Week 16 — C4 architecture diagram in README; ADR portfolio in `docs/adr/`; `git` tag `v2-microservices`
-- `self` — 3 mock interviews done; 15-min architecture walkthrough delivered
+> Anchor concepts:
+- `W13.k8s` — manifests/probes for all services
+- `W14.tracing` (OTel trace spans the saga), `W14.dashboard`
+- `W15.loadtest` (`file`, before/after numbers), `W15.hpa`
+- `W16.diagram` (`file`, C4), `W16.adr-portfolio` (`file`), `W16.tag` (`git` `v2-microservices`)
+- `W16.mocks` (`self`) — 3 mock interviews + architecture walkthrough
 
 ---
 
@@ -111,6 +104,5 @@ Concept: distributed failures; consistency & consensus (the hard chapters).
 
 When `elapsed_week > plan_week`, the skill applies the plan's slippage rule: it
 protects the `self` reflection and that week's exercise, and offers to defer the
-build criteria (the `codegraph`/`test`/`file` boxes) to a later week rather than
-letting you stall. Open build boxes carry forward; they are never silently
-dropped.
+build concepts (`codegraph`/`test`/`file`) to a later week rather than letting you
+stall. Open build concepts carry forward; they are never silently dropped.

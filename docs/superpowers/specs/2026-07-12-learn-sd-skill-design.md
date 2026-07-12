@@ -39,22 +39,30 @@ is hardcoded and every `notebooklm` call passes it explicitly (`--notebook` /
 `-n`) rather than relying on `notebooklm use`, so the skill is stateless and
 parallel-safe.
 
+The repo is a **polyglot monorepo**: shared, language-agnostic learning materials
+at the root; the practice project implemented once per language under `apps/`.
+This lets the same skill and curriculum drive a Node build now and a Go or Java
+build later.
+
 ```
-.claude/skills/learn-sd/SKILL.md      # the skill: 3 modes, notebook id, auth check, slippage logic
-docs/system-design-progress.md        # progress state (new, committed)
-docs/system-design-acceptance.md      # per-week definition-of-done the build check verifies (new, committed)
-docs/exercises/<planweek>-<topic>.md  # exercise attempts + gap analysis (milestone deliverable)
+.claude/skills/learn-sd/SKILL.md          # the skill: 3 modes, notebook id, auth check, slippage logic
+docs/system-design-progress.md            # progress state incl. active_impl (new, committed)
+docs/system-design-acceptance.md          # CONCEPT-level definition-of-done, stable IDs (committed)
+docs/exercises/<planweek>-<topic>.md      # exercise attempts + gap analysis (milestone deliverable)
+apps/<impl>/acceptance.<lang>.md          # per-impl manifest: concept ID → concrete check
+apps/deliveroo-node/                       # current TS implementation
 ```
 
 Reused, not rebuilt:
 - `docs/system-design-learning-plan.md`, `docs/system-design-plan-detailed.md` — the syllabus.
-- `docs/system-design-acceptance.md` — the machine-checkable acceptance criteria
-  per week (Component 3); the build check reads it instead of guessing.
-- The repo's own TODOs and `⚠️` markers (e.g. the race-condition comment in
-  `src/modules/orders/service.ts`) — targets referenced by the acceptance checks.
+- `docs/system-design-acceptance.md` + `apps/<impl>/acceptance.<lang>.md` — the
+  machine-checkable acceptance criteria (Component 3): concepts shared, concrete
+  checks per language. The build check reads them instead of guessing.
+- The implementation's own TODOs / `⚠️` markers (e.g. the race-condition comment
+  in `apps/deliveroo-node/src/modules/orders/service.ts`) — targets the manifest points at.
 - The installed `notebooklm` skill/CLI — the grounded-knowledge backend.
 - The CodeGraph MCP server (`codegraph_*` tools) — the structural verifier for
-  build checks (does the symbol/edge exist).
+  build checks; parses Go/Java/TS so it works for every implementation.
 
 ### Constants baked into the skill
 
@@ -72,6 +80,7 @@ invocation and rewritten as progress is made.
 plan_week: 3          # where the syllabus says you are
 elapsed_week: 4       # real weeks since you started (slippage = elapsed - plan)
 phase: 1
+active_impl: node     # which apps/<impl> you're currently building (node | go | java)
 started: 2026-07-12
 exercises_done: [url-shortener, rate-limiter]
 weak_concepts: [write-skew, replication-lag]
@@ -79,6 +88,10 @@ weak_concepts: [write-skew, replication-lag]
 ## Log
 - 2026-07-12 Week 3 — reproduced race condition; SELECT FOR UPDATE fix done, benchmarking pending.
 ```
+
+- `active_impl` selects which `apps/<impl>/acceptance.<lang>.md` manifest the
+  build check uses. Switching languages to re-run the curriculum = change this
+  field; progress/weak_concepts/exercises are language-agnostic and carry over.
 
 - `plan_week` advances only when the week's work is genuinely done.
 - `elapsed_week` advances with wall-clock time.
@@ -105,10 +118,11 @@ and stop. Then read the progress file.
    full agenda.
 3. **Read:** offer a short quiz via `notebooklm ask` grounded in the notebook,
    weighted toward `weak_concepts`. Score verbally; update `weak_concepts`.
-4. **Build:** read this week's block in `docs/system-design-acceptance.md` and
-   **run each acceptance check with the tool it names** (Component 3) — not a
-   vibes-based read. Present the green/red list. Never mark a `codegraph`/`test`/
-   `file`/`git` box green without the tool confirming it.
+4. **Build:** read this week's concepts in `docs/system-design-acceptance.md`,
+   load the manifest for `active_impl` (`apps/<impl>/acceptance.<lang>.md`), and
+   **run each concept's concrete check with the tool it names** (Component 3) —
+   not a vibes-based read. Present the green/red list. Never mark a `codegraph`/
+   `test`/`file`/`git` concept green without the tool confirming it.
 5. Append a dated line to the log; bump `plan_week` only when the user confirms
    the week is complete.
 
@@ -137,10 +151,15 @@ and stop. Then read the progress file.
 
 ## Component 3 — Acceptance criteria & build verification
 
-**File:** `docs/system-design-acceptance.md`, committed. Maps each week to a
-checklist of concrete, tool-verifiable facts — the machine-checkable "definition
-of done" that keeps the coding aligned with the syllabus. The skill reads it in
-the `this-week` build step and runs each check with the tool it's tagged with.
+**Files:** `docs/system-design-acceptance.md` (shared, concept-level) +
+`apps/<impl>/acceptance.<lang>.md` (per-implementation manifest), both committed.
+The shared doc lists **concepts** with stable IDs (`W3.pessimistic`) — the
+machine-checkable "definition of done" that keeps coding aligned with the
+syllabus. Each manifest maps those IDs to a **concrete check for one language**
+(grep pattern / codegraph symbol / test command). This indirection is what makes
+the skill reusable across Node/Go/Java: switch `active_impl`, same concepts, new
+manifest. The build step reads the shared concepts + the active manifest and runs
+each check with its tagged tool.
 
 Check types and their verifier:
 
@@ -161,10 +180,11 @@ Rules the skill follows:
   user explicitly overrides (e.g. under the slippage rule).
 - Open build boxes carry forward to later weeks; they are never silently dropped.
 
-Phase 1 (weeks 1–4) is fully specified and grounded in real repo paths. Phases
-2–4 hold anchor checks to be expanded on arrival, since that infra isn't built
-yet. The acceptance file is the single source the build check reads — changing a
-week's definition of done means editing that file, not the skill.
+Phase 1 (weeks 1–4) concepts are fully specified in the shared doc and mapped to
+concrete Node checks in `apps/deliveroo-node/acceptance.node.md`. Phases 2–4 hold
+anchor concepts to be expanded on arrival, since that infra isn't built yet.
+Changing a week's definition of done means editing these files, not the skill; a
+new language means adding one manifest, not touching the skill.
 
 ## Data flow
 
