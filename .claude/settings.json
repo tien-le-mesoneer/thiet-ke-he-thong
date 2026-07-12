@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "codegraph sync >/dev/null 2>&1 || true",
+            "async": true,
+            "statusMessage": "Syncing CodeGraph index"
+          }
+        ]
+      }
+    ]
+  }
+}
