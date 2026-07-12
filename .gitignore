@@ -4,3 +4,4 @@ dist/
 *.log
 .codegraph/
 .claude/.cc-writes/
+.superpowers/
