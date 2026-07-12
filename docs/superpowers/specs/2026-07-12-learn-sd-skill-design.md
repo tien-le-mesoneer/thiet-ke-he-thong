@@ -42,14 +42,19 @@ parallel-safe.
 ```
 .claude/skills/learn-sd/SKILL.md      # the skill: 3 modes, notebook id, auth check, slippage logic
 docs/system-design-progress.md        # progress state (new, committed)
+docs/system-design-acceptance.md      # per-week definition-of-done the build check verifies (new, committed)
 docs/exercises/<planweek>-<topic>.md  # exercise attempts + gap analysis (milestone deliverable)
 ```
 
 Reused, not rebuilt:
 - `docs/system-design-learning-plan.md`, `docs/system-design-plan-detailed.md` — the syllabus.
+- `docs/system-design-acceptance.md` — the machine-checkable acceptance criteria
+  per week (Component 3); the build check reads it instead of guessing.
 - The repo's own TODOs and `⚠️` markers (e.g. the race-condition comment in
-  `src/modules/orders/service.ts`) — the build cross-reference targets.
+  `src/modules/orders/service.ts`) — targets referenced by the acceptance checks.
 - The installed `notebooklm` skill/CLI — the grounded-knowledge backend.
+- The CodeGraph MCP server (`codegraph_*` tools) — the structural verifier for
+  build checks (does the symbol/edge exist).
 
 ### Constants baked into the skill
 
@@ -100,8 +105,10 @@ and stop. Then read the progress file.
    full agenda.
 3. **Read:** offer a short quiz via `notebooklm ask` grounded in the notebook,
    weighted toward `weak_concepts`. Score verbally; update `weak_concepts`.
-4. **Build:** cross-reference the actual repo (relevant module files, TODOs,
-   `⚠️` markers) and sanity-check the user's code against the week's concept.
+4. **Build:** read this week's block in `docs/system-design-acceptance.md` and
+   **run each acceptance check with the tool it names** (Component 3) — not a
+   vibes-based read. Present the green/red list. Never mark a `codegraph`/`test`/
+   `file`/`git` box green without the tool confirming it.
 5. Append a dated line to the log; bump `plan_week` only when the user confirms
    the week is complete.
 
@@ -128,13 +135,45 @@ and stop. Then read the progress file.
    commit it (this is the "4 written design docs" milestone deliverable).
 5. Add missed items to `weak_concepts`; add the topic to `exercises_done`.
 
+## Component 3 — Acceptance criteria & build verification
+
+**File:** `docs/system-design-acceptance.md`, committed. Maps each week to a
+checklist of concrete, tool-verifiable facts — the machine-checkable "definition
+of done" that keeps the coding aligned with the syllabus. The skill reads it in
+the `this-week` build step and runs each check with the tool it's tagged with.
+
+Check types and their verifier:
+
+| Tag | Verified by |
+|-----|-------------|
+| `codegraph` | `codegraph_search` / `codegraph_callers` / `codegraph_impact` — does the symbol/edge exist |
+| `grep` | ripgrep — literal SQL fragments, headers, markers |
+| `test` / `typecheck` | `npm test` / `npm run typecheck` — does it actually work / compile |
+| `file` | path exists — an artifact was produced |
+| `git` | `git tag` / `git log` — milestone tags |
+| `self` | the user answers honestly — whiteboard recall; asked, never a gate |
+
+Rules the skill follows:
+- A `codegraph`/`test`/`file`/`git` box goes green **only** when its tool confirms
+  it — no marking-by-assertion.
+- `self` items are checkpoints, surfaced but never blocking.
+- `plan_week` advances only when the week's non-`self` boxes are green **or** the
+  user explicitly overrides (e.g. under the slippage rule).
+- Open build boxes carry forward to later weeks; they are never silently dropped.
+
+Phase 1 (weeks 1–4) is fully specified and grounded in real repo paths. Phases
+2–4 hold anchor checks to be expanded on arrival, since that infra isn't built
+yet. The acceptance file is the single source the build check reads — changing a
+week's definition of done means editing that file, not the skill.
+
 ## Data flow
 
 ```
 progress.md ──► skill reads state ──► plan docs (week block)
                      │
                      ├─ this-week ─► notebooklm ask (quiz) ─► update weak_concepts + log
-                     │              └► repo files (build check)
+                     │              └► acceptance.md checks ─► codegraph / grep / npm test / git
+                     │                 (green/red list; gates plan_week bump)
                      ├─ ask ───────► notebooklm ask --json ─► answer + repo tie-in
                      └─ exercise ──► timed attempt ─► notebooklm (canonical) ─► gap doc + commit
                      │
@@ -157,10 +196,11 @@ This is a prose skill (Markdown instructions), not executable code, so
 
 1. **Fresh start:** no progress file → skill bootstraps it correctly.
 2. **`this-week` on pace:** presents full week agenda from the plan doc.
-3. **`this-week` behind:** `elapsed_week > plan_week` → slippage rule kicks in, build offered for deferral, exercise protected.
-4. **`ask`:** produces a grounded answer with a repo tie-in; offers note-save.
-5. **`exercise`:** times an attempt, writes a committed gap-analysis doc, updates `weak_concepts` + `exercises_done`.
-6. **Auth failure path:** stale cookies → skill stops and instructs re-login.
+3. **`this-week` build check:** runs the week's acceptance criteria with real tools and reports a green/red list; a box only greens when its tool confirms it (e.g. Week 2 "transitions enforced" stays red until `placeOrder` routes through `canTransition`).
+4. **`this-week` behind:** `elapsed_week > plan_week` → slippage rule kicks in, build offered for deferral, exercise + `self` reflection protected.
+5. **`ask`:** produces a grounded answer with a repo tie-in; offers note-save.
+6. **`exercise`:** times an attempt, writes a committed gap-analysis doc, updates `weak_concepts` + `exercises_done`.
+7. **Auth failure path:** stale cookies → skill stops and instructs re-login.
 
 ## Open questions
 
