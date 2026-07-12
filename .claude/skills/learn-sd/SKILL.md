@@ -50,7 +50,7 @@ weak_concepts: []
 
 ## Slippage rule (applies in `this-week`)
 
-Slippage = `elapsed_week - plan_week`. When positive, protect reading + the exercise + `self` reflection; offer to defer/stub the **build** first. From the plan: "cut the exercise before the build, and cut the build before the reading — but never skip two exercises in a row." Frame slippage neutrally ("2 weeks behind syllabus pace — normal for this plan").
+Slippage = `elapsed_week - plan_week`. When positive, protect reading + the timed exercise + `self` reflection, and defer or stub the **build** first — the build is where overruns actually accrue, and the timed exercise is the graded milestone deliverable (the "4 written design docs"). This intentionally adapts the plan's raw slippage wording to protect the exercise; the one hard rule carried over unchanged: never skip two exercises in a row. Frame slippage neutrally ("2 weeks behind syllabus pace — normal for this plan").
 
 ## Autonomy
 
