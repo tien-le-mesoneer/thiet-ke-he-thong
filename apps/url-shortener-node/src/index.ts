@@ -5,11 +5,25 @@ import { getDb, closeDb } from "./db.js";
 import { getRedis, closeRedis } from "./cache.js";
 import { linkRoutes } from "./modules/links/routes.js";
 import { startFlusher, stopFlusher } from "./modules/links/clicks.js";
+import { httpLatency, registry } from "./metrics.js";
 
 export function buildApp() {
   const app = Fastify({
     logger: { level: config.logLevel },
     genReqId: () => randomUUID(), // correlation id per request
+  });
+
+  app.addHook("onResponse", async (req, reply) => {
+    const route = (req.routeOptions?.url ?? req.url);
+    httpLatency.observe(
+      { method: req.method, route, status: String(reply.statusCode) },
+      reply.elapsedTime / 1000,
+    );
+  });
+
+  app.get("/metrics", async (_req, reply) => {
+    reply.header("content-type", registry.contentType);
+    return registry.metrics();
   });
 
   app.get("/health", async (_req, reply) => {

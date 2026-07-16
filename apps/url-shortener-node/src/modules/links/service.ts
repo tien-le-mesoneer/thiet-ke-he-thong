@@ -3,6 +3,7 @@ import { makeAllocator } from "./idrange.js";
 import { encode } from "./keygen.js";
 import { insertLink, findByCode } from "./repo.js";
 import { cacheGet, cacheSet, incrClick } from "../../cache.js";
+import { cacheHits, cacheMisses } from "../../metrics.js";
 import type { LinkDoc } from "../../db.js";
 
 const alloc = makeAllocator("url");
@@ -30,7 +31,8 @@ export async function shorten(longUrl: string, opts: ShortenOpts = {}): Promise<
 
 export async function resolve(code: string): Promise<string | null> {
   const cached = await cacheGet(code);
-  if (cached) { await incrClick(code); return cached; }   // cache hit
+  if (cached) { cacheHits.inc(); await incrClick(code); return cached; }   // cache hit
+  cacheMisses.inc();
   const doc = await findByCode(code);                     // cache miss (normal)
   if (!doc) return null;
   await cacheSet(code, doc.long_url, config.cacheTtlS);

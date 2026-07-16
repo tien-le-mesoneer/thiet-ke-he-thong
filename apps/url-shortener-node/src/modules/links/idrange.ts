@@ -1,5 +1,6 @@
 import { getDb, counters } from "../../db.js";
 import { config } from "../../config.js";
+import { idBlocks } from "../../metrics.js";
 
 // Ranged allocation: each refill claims a block of ID_BLOCK_SIZE ids with a single
 // atomic $inc, then hands them out from memory. This removes per-request counter
@@ -20,6 +21,7 @@ export function makeAllocator(counterId = "url") {
     const top = res!.seq;                     // e.g. 1000
     next = top - config.idBlockSize + 1;      // 1
     max = top;                                // 1000
+    idBlocks.inc();
   }
 
   return {
