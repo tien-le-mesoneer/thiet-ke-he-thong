@@ -145,7 +145,9 @@ MISS: `repo.findByCode` → not found/expired `404`; else `302`, repopulate cach
 - **Health**: `/health` pings Mongo + Redis; `503` if a dependency is down.
 - **Metrics** (`/metrics`, prom-client): request rate; **latency histogram →
   p50/p95/p99**; cache hit ratio; id-block allocation count; Mongo op latency.
-  Optional Grafana + Prometheus in compose.
+  Instrumentation is built now (always-on). **Prometheus + Grafana containers are
+  an optional compose add-on**, and the Grafana **dashboard is built during the
+  k6 load-test task** — when there's real load to watch it react to, not before.
 - **Tracing**: OpenTelemetry spans `redirect → cache lookup → mongo read`.
 
 ## Error handling
