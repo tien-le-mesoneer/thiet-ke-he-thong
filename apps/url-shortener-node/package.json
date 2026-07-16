@@ -1,0 +1,26 @@
+{
+  "name": "url-shortener-node",
+  "version": "0.1.0",
+  "description": "URL shortener service — DDIA ch.1 scalability/maintainability practice",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx test/*.test.ts"
+  },
+  "dependencies": {
+    "fastify": "^5.2.0",
+    "ioredis": "^5.4.0",
+    "mongodb": "^6.12.0",
+    "pino": "^9.5.0",
+    "prom-client": "^15.1.0",
+    "sqids": "^0.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
