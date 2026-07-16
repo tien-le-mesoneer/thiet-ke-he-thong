@@ -24,13 +24,11 @@ export async function cacheSet(code: string, url: string, ttlS: number): Promise
 export async function incrClick(code: string): Promise<void> {
   await getRedis().hincrby(CLICK_HASH, code, 1);
 }
-// Atomically read-and-clear the click hash so the flusher can reconcile to Mongo.
+// Atomic read-and-clear so click increments racing between read and delete are not lost.
+const DRAIN_LUA = "local v = redis.call('HGETALL', KEYS[1]); redis.call('DEL', KEYS[1]); return v";
 export async function drainClicks(): Promise<Record<string, number>> {
-  const r = getRedis();
-  const all = await r.hgetall(CLICK_HASH);
-  if (Object.keys(all).length === 0) return {};
-  await r.del(CLICK_HASH);
+  const flat = (await getRedis().eval(DRAIN_LUA, 1, CLICK_HASH)) as string[];
   const out: Record<string, number> = {};
-  for (const [k, v] of Object.entries(all)) out[k] = Number(v);
+  for (let i = 0; i < flat.length; i += 2) out[flat[i]!] = Number(flat[i + 1]);
   return out;
 }
