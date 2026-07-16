@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import { getDb, closeDb } from "./db.js";
 import { getRedis, closeRedis } from "./cache.js";
 import { linkRoutes } from "./modules/links/routes.js";
+import { startFlusher, stopFlusher } from "./modules/links/clicks.js";
 
 export function buildApp() {
   const app = Fastify({
@@ -30,10 +31,11 @@ export function buildApp() {
 
 async function main() {
   const app = buildApp();
-  const shutdown = async () => { await app.close(); await closeDb(); await closeRedis(); process.exit(0); };
+  const shutdown = async () => { stopFlusher(); await app.close(); await closeDb(); await closeRedis(); process.exit(0); };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
   await app.listen({ port: config.port, host: "0.0.0.0" });
+  startFlusher();
 }
 
 // Only run when executed directly, so tests can import buildApp without listening.
