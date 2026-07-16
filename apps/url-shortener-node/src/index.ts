@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import { getDb, closeDb } from "./db.js";
 import { getRedis, closeRedis } from "./cache.js";
+import { linkRoutes } from "./modules/links/routes.js";
 
 export function buildApp() {
   const app = Fastify({
@@ -21,6 +22,8 @@ export function buildApp() {
       return { status: "degraded", error: (err as Error).message };
     }
   });
+
+  void app.register(linkRoutes);
 
   return app;
 }
