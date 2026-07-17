@@ -30,13 +30,25 @@ export async function shorten(longUrl: string, opts: ShortenOpts = {}): Promise<
 }
 
 export async function resolve(code: string): Promise<string | null> {
-  const cached = await cacheGet(code);
-  if (cached) { cacheHits.inc(); await incrClick(code); return cached; }   // cache hit
+  let cached: string | null = null;
+  try {
+    cached = await cacheGet(code);
+  } catch (err) {
+    // Redis down: treat as cache miss and fall through to Mongo so reads degrade, not fail.
+    console.warn(`[resolve] cacheGet failed for ${code}, falling back to Mongo:`, err);
+  }
+  if (cached) {
+    cacheHits.inc();
+    try { await incrClick(code); } catch (err) { console.warn(`[resolve] incrClick failed for ${code}:`, err); }
+    return cached;                                         // cache hit
+  }
   cacheMisses.inc();
-  const doc = await findByCode(code);                     // cache miss (normal)
+  const doc = await findByCode(code);                     // cache miss (normal or Redis-down fallback)
   if (!doc) return null;
-  await cacheSet(code, doc.long_url, config.cacheTtlS);
-  await incrClick(code);
+  try { await cacheSet(code, doc.long_url, config.cacheTtlS); }
+  catch (err) { console.warn(`[resolve] cacheSet failed for ${code}:`, err); }
+  try { await incrClick(code); }
+  catch (err) { console.warn(`[resolve] incrClick failed for ${code}:`, err); }
   return doc.long_url;
 }
 

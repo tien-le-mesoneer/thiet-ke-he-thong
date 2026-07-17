@@ -60,6 +60,8 @@ Fastify route ──► service.resolve(code)
 
 Click counts accumulate in the Redis hash `clicks` (field = code) and are drained atomically (Lua `HGETALL` + `DEL`) every 5s by a background flusher, which batches a `bulkWrite` of `$inc click_count` into Mongo — see §9 for why this is batched rather than a direct Mongo `$inc` per redirect.
 
+**Redis-down behavior:** `service.resolve()` treats any Redis error (on `cacheGet`, `incrClick`, or the repopulating `cacheSet`) as non-fatal — a thrown `cacheGet` is treated as a cache miss and falls through to Mongo, and a failing `incrClick`/`cacheSet` is logged and swallowed. Net effect: redirects keep returning `302` by reading Mongo directly when Redis is unavailable (degraded but functional); the only things lost are click increments and cache warming, not availability.
+
 ## 3. API reference
 
 ### `POST /api/v1/urls`
@@ -136,6 +138,8 @@ Prometheus scrape endpoint. Returns text in `prom-client`'s default content type
 Indexes:
 - `{ short_code: 1 }` unique — enforces one document per code, also the lookup path for redirects/stats.
 - `{ expires_at: 1 }` with `expireAfterSeconds: 0` — native Mongo TTL index; Mongo's background reaper deletes expired links automatically instead of a hand-rolled sweeper job.
+
+**Expiry is fixed-window, not sliding:** `expires_at` is set once at creation to `created_at + LINK_TTL_DAYS` (default 7 days) and never extended by later reads/redirects. Mongo's TTL background sweeper runs periodically (not instantly), so deletion can lag the `expires_at` timestamp by up to ~60s. Separately, the Redis cache entry (`CACHE_TTL_S`, default 1 day) has its own, shorter TTL — so a code that just passed its Mongo expiry may still 302 briefly from a still-warm cache entry until that entry ages out, and even after Mongo expiry a request can briefly still find the document until the sweeper actually deletes it.
 
 ### `counters` collection
 

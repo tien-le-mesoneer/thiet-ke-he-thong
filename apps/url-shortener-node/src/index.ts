@@ -14,7 +14,7 @@ export function buildApp() {
   });
 
   app.addHook("onResponse", async (req, reply) => {
-    const route = (req.routeOptions?.url ?? req.url);
+    const route = (req.routeOptions?.url ?? "unknown");
     httpLatency.observe(
       { method: req.method, route, status: String(reply.statusCode) },
       reply.elapsedTime / 1000,
