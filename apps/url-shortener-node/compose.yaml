@@ -6,3 +6,13 @@ services:
     image: redis:7
     command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     ports: ["6379:6379"]
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ["observability"]
+    volumes: ["./load/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+  grafana:
+    image: grafana/grafana:latest
+    profiles: ["observability"]
+    environment: { GF_AUTH_ANONYMOUS_ENABLED: "true", GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin" }
+    ports: ["3002:3000"]
