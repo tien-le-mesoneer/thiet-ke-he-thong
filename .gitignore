@@ -5,3 +5,4 @@ dist/
 .codegraph/
 .claude/.cc-writes/
 .superpowers/
+.DS_Store
