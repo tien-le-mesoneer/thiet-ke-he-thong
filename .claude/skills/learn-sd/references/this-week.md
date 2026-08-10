@@ -15,7 +15,7 @@ Read `plan_week`, `elapsed_week`, `active_impl`, `weak_concepts` from `docs/syst
 
 Ask if the user wants a short quiz on this week's reading. If yes:
 `notebooklm ask "Ask me 3 short quiz questions on: <this week's reading topics>. Weight toward these weak areas if relevant: <weak_concepts>. One at a time; wait for my answer before the next." --notebook 173bf885-0641-4c53-b965-f2e910b68768`
-Score verbally. Update `weak_concepts`: append clearly-missed topics, remove ones answered well.
+Score verbally. Update `weak_concepts`: append clearly-missed topics, remove ones answered well. If a missed question produced a useful correction, offer to save it as a study note via the `note` auto-capture flow (`references/note.md`, `source: quiz`).
 
 ## 4. Build check (the alignment gate)
 

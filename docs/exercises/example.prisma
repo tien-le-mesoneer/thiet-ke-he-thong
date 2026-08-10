@@ -1,0 +1,426 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users          User[]
+  diningAreas    DiningArea[]
+  categories     Category[]
+  expenses       Expense[]
+  budgets        Budget[]
+  invoices       Invoice[]
+  settings       BranchSettings?
+}
+
+model BranchSettings {
+  id                String   @id @default(cuid())
+  branchId          String   @unique
+  language          String   @default("en")
+  currency          String   @default("USD")
+  enableFloor       Boolean  @default(true)
+  enableLocations   Boolean  @default(true)
+  enableLabor       Boolean  @default(true)
+  defaultTaxRate    Decimal  @db.Decimal(5, 3) @default(0)
+  serviceChargeRate Decimal  @db.Decimal(5, 3) @default(0)
+  receiptOption     String   @default("ask_customer")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+}
+
+model Unit {
+  id        String   @id @default(cuid())
+  name      String
+  abbr      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id       String  @id @default(cuid())
+  email    String  @unique
+  name     String
+  role     String  // Server, Kitchen Manager, General Manager
+  password String
+  branchId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch       Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  orders       Order[]
+}
+
+model DiningArea {
+  id       String   @id @default(cuid())
+  branchId String
+  name     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  tables Table[]
+}
+
+model Table {
+  id           String   @id @default(cuid())
+  diningAreaId String
+  name         String   // T-01, B-20
+  type         String   @default("table") // table, bar
+  capacity     Int      @default(4)
+  status       String   @default("available") // available, occupied, needs_cleaning
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  diningArea DiningArea @relation(fields: [diningAreaId], references: [id], onDelete: Cascade)
+  orders     Order[]
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  branchId  String
+  name      String
+  nameVi    String?
+  icon      String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch    Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  menuItems MenuItem[]
+}
+
+model MenuItem {
+  id          String   @id @default(cuid())
+  categoryId  String
+  name        String
+  nameVi      String?
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  imageUrl    String?
+  status      String   @default("active") // active, inactive
+  dietaryTags String[] // GF, V, VG
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  modifiers  Modifier[]
+  orderItems OrderItem[]
+  recipe     Recipe?
+}
+
+model Modifier {
+  id              String   @id @default(cuid())
+  menuItemId      String
+  name            String
+  priceAdjustment Decimal  @db.Decimal(10, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  menuItem     MenuItem      @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  orderItems   OrderItemModifier[]
+}
+
+model Order {
+  id             String    @id @default(cuid())
+  tableId        String?
+  serverId       String
+  status         String    @default("draft") // draft, held, fired, paid
+  guestCount     Int       @default(1)
+  subtotal       Decimal   @db.Decimal(10, 2) @default(0)
+  taxAmount      Decimal   @db.Decimal(10, 2) @default(0)
+  serviceCharge  Decimal   @db.Decimal(10, 2) @default(0)
+  totalAmount    Decimal   @db.Decimal(10, 2) @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  table     Table?          @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  server    User            @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  items     OrderItem[]
+  payments  Payment[]
+  salesTransactions SalesTransaction[]
+
+  @@index([createdAt])
+  @@index([serverId])
+}
+
+model OrderItem {
+  id           String   @id @default(cuid())
+  orderId      String
+  menuItemId   String
+  quantity     Int      @default(1)
+  priceAtOrder Decimal  @db.Decimal(10, 2)
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem  MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  modifiers OrderItemModifier[]
+
+  @@index([orderId])
+  @@index([menuItemId])
+}
+
+model OrderItemModifier {
+  orderItemId String
+  modifierId  String
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  modifier  Modifier  @relation(fields: [modifierId], references: [id], onDelete: Cascade)
+
+  @@id([orderItemId, modifierId])
+}
+
+model IngredientCategory {
+  id        String   @id @default(cuid())
+  name      String
+  nameVi    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ingredients Ingredient[]
+}
+
+model Ingredient {
+  id             String   @id @default(cuid())
+  categoryId     String
+  name           String
+  nameVi         String?
+  sku            String?  @unique
+  unitCost       Decimal  @db.Decimal(10, 2)
+  unit           String   // oz, lb, unit, etc.
+  stockLevel     Decimal  @db.Decimal(12, 4) @default(0)
+  minStockLevel  Decimal  @db.Decimal(12, 4) @default(0)
+  imageUrl       String?
+  supplierId     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  category         IngredientCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  supplier         Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  costHistory      IngredientCostHistory[]
+  recipeIngredients RecipeIngredient[]
+}
+
+model IngredientCostHistory {
+  id          String   @id @default(cuid())
+  ingredientId String
+  cost        Decimal  @db.Decimal(10, 2)
+  recordedAt  DateTime @default(now())
+
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ingredients Ingredient[]
+}
+
+model Recipe {
+  id         String   @id @default(cuid())
+  menuItemId String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  menuItem  MenuItem          @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  ingredients RecipeIngredient[]
+}
+
+model RecipeIngredient {
+  id          String   @id @default(cuid())
+  recipeId    String
+  ingredientId String
+  quantity    Decimal  @db.Decimal(12, 4)
+  unit        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  recipe    Recipe    @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+}
+
+model SalesTransaction {
+  id        String   @id @default(cuid())
+  orderId   String
+  amount    Decimal  @db.Decimal(10, 2)
+  type      String   // sale, refund, etc.
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([type])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  branchId    String
+  category    String   // COGS, labor, rent, other
+  amount      Decimal  @db.Decimal(10, 2)
+  date        DateTime
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([date])
+  @@index([branchId])
+  @@index([category])
+}
+
+model Budget {
+  id         String   @id @default(cuid())
+  branchId   String
+  category   String
+  periodStart DateTime
+  periodEnd   DateTime
+  amount     Decimal  @db.Decimal(10, 2)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([periodStart])
+  @@index([periodEnd])
+  @@index([branchId])
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  orderId   String
+  amount    Decimal  @db.Decimal(10, 2)
+  method    String   // cash, card, split
+  status    String   @default("pending") // pending, completed, failed
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  icon        String
+  description String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions RolePermission[]
+}
+
+model PermissionSection {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  icon      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  permissions Permission[]
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  sectionId   String
+  action      String
+  description String
+  columns     String[]
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  section         PermissionSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  rolePermissions RolePermission[]
+
+  @@unique([sectionId, action])
+}
+
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String
+  permissionId String
+  grants       Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  branchId      String
+  type          String   // revenue, expense
+  category      String   // e.g. catering, rent, utilities, supplies, other
+  amount        Decimal  @db.Decimal(10, 2)
+  date          DateTime
+  counterparty  String?  // vendor or customer name
+  description   String?
+  invoiceNumber String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId])
+  @@index([type])
+  @@index([date])
+}
+
+model EventLog {
+  id        String   @id @default(cuid())
+  branchId  String?
+  userId    String?
+  action    String   // e.g. "order.created", "menu_item.updated", "user.login"
+  entity    String?  // e.g. "Order", "MenuItem", "User"
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([branchId])
+  @@index([userId])
+  @@index([action])
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model TelegramRecipient {
+  id        String   @id @default(cuid())
+  chatId    String   @unique
+  label     String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DigestState {
+  id              String    @id @default("singleton")
+  lastSentDateKey String?
+  lastSentAt      DateTime?
+  updatedAt       DateTime  @updatedAt
+}

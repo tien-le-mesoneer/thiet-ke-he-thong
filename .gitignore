@@ -3,6 +3,7 @@ dist/
 .env
 *.log
 .codegraph/
+graphify-out/
 .claude/.cc-writes/
 .superpowers/
 .DS_Store
