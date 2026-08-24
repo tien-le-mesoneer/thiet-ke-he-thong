@@ -10,7 +10,7 @@
     "start": "node dist/index.js",
     "start:otel": "OTEL_ENABLED=1 OTEL_SERVICE_NAME=url-shortener OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:7318 node --import ./dist/otel.js dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-test-module-mocks --test --test-concurrency=1 --import tsx test/*.test.ts"
+    "test": "MONGO_URL=mongodb://localhost:27017/shorturl_test REDIS_URL=redis://localhost:6379/1 node --experimental-test-module-mocks --test --test-concurrency=1 --import tsx --import ./test/setup.ts test/*.test.ts"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",

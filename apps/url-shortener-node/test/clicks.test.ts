@@ -1,12 +1,12 @@
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { getDb, links, closeDb, type LinkDoc } from "../src/db.js";
+import { getDb, links, counters, closeDb, type LinkDoc } from "../src/db.js";
 import { getRedis, closeRedis, incrClick } from "../src/cache.js";
 import { insertLink } from "../src/modules/links/repo.js";
 import { flushOnce } from "../src/modules/links/clicks.js";
 
 before(async () => { await getDb(); });
-beforeEach(async () => { const db = await getDb(); await links(db).deleteMany({}); await getRedis().flushdb(); });
+beforeEach(async () => { const db = await getDb(); await links(db).deleteMany({}); await counters(db).deleteMany({}); await getRedis().flushdb(); });
 after(async () => { await closeDb(); await closeRedis(); });
 
 test("flushOnce moves buffered clicks from redis into mongo", async () => {
