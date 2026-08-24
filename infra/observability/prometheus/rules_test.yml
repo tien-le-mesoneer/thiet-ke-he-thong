@@ -1,0 +1,106 @@
+# Unit tests for rules.yml — run with:
+#   promtool test rules rules_test.yml
+#
+# An alert that has never fired is not an alert, it is a wish. Waiting for a
+# real incident to find out whether the expression works is the worst possible
+# time to discover a typo, and deliberately melting the service to test it is
+# both slow and unrepeatable. These drive synthetic series through the real
+# rules instead.
+
+rule_files:
+  - rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  # ------------------------------------------------------------------
+  # 20% of redirects slower than 50ms => 20x burn. Both the 1h and the 5m
+  # window are over the 14.4x threshold, so critical must fire.
+  # ------------------------------------------------------------------
+  - interval: 1m
+    name: sustained 20x burn fires the critical alert
+    input_series:
+      - series: 'http_request_duration_seconds_count{route="/:code",status="302"}'
+        values: '0+100x180'
+      - series: 'http_request_duration_seconds_bucket{route="/:code",status="302",le="0.05"}'
+        values: '0+80x180'
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: RedirectLatencyBudgetBurnCritical
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              slo: redirect-latency
+            exp_annotations:
+              summary: "Redirect latency budget burning 14.4x — 2% of the 30d budget per hour"
+              description: "More than 14.4% of successful redirects are slower than 50 ms over the last hour, and still are over the last 5 minutes. At this rate the entire 30-day error budget is gone in about 2 days."
+
+  # ------------------------------------------------------------------
+  # Healthy traffic: 0.1% slow, a 0.1x burn. Nothing may fire — a burn-rate
+  # alert that pages on normal noise gets muted, and a muted alert is worse
+  # than none.
+  # ------------------------------------------------------------------
+  - interval: 1m
+    name: healthy traffic fires nothing
+    input_series:
+      - series: 'http_request_duration_seconds_count{route="/:code",status="302"}'
+        values: '0+1000x180'
+      - series: 'http_request_duration_seconds_bucket{route="/:code",status="302",le="0.05"}'
+        values: '0+999x180'
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: RedirectLatencyBudgetBurnCritical
+        exp_alerts: []
+      - eval_time: 120m
+        alertname: RedirectLatencyBudgetBurnHigh
+        exp_alerts: []
+      - eval_time: 120m
+        alertname: RedirectLatencyBudgetBurnSlow
+        exp_alerts: []
+
+  # ------------------------------------------------------------------
+  # 8x burn: above the 6x "high" threshold but below 14.4x. High fires,
+  # critical stays quiet. This is the test that catches a copy-paste error
+  # between the two alert expressions.
+  # ------------------------------------------------------------------
+  - interval: 1m
+    name: 8x burn fires high but not critical
+    input_series:
+      - series: 'http_request_duration_seconds_count{route="/:code",status="302"}'
+        values: '0+100x600'
+      - series: 'http_request_duration_seconds_bucket{route="/:code",status="302",le="0.05"}'
+        values: '0+92x600'
+    alert_rule_test:
+      - eval_time: 500m
+        alertname: RedirectLatencyBudgetBurnCritical
+        exp_alerts: []
+      - eval_time: 500m
+        alertname: RedirectLatencyBudgetBurnHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              slo: redirect-latency
+            exp_annotations:
+              summary: "Redirect latency budget burning 6x — 5% of the 30d budget per 6h"
+              description: "Slower than the critical alert but well above sustainable. Worth looking at during working hours rather than at 3am."
+
+  # ------------------------------------------------------------------
+  # No successful redirects at all. The latency SLI goes ABSENT rather than
+  # bad, which is the blind spot a latency-only SLO always has. The guard
+  # alert exists to make that visible instead of serenely green.
+  # ------------------------------------------------------------------
+  - interval: 1m
+    name: absent SLI trips the guard alert
+    input_series:
+      - series: 'up{job="otel-collector-apps"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: RedirectLatencySLIMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              slo: redirect-latency
+            exp_annotations:
+              summary: "Redirect latency SLI has no data — cannot tell healthy from dead"
+              description: "No successful redirects recorded for 10 minutes. Either traffic stopped or every request is failing. A latency SLO cannot distinguish the two; check availability."

@@ -2,7 +2,8 @@ global:
   scrape_interval: 5s
   evaluation_interval: 15s
 
-# rule_files is wired in slice 4 (SLI recording rule + burn-rate alert).
+rule_files:
+  - /etc/prometheus/rules.yml
 
 scrape_configs:
   # App metrics, forwarded by the Collector's prometheus exporter.

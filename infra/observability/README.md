@@ -58,6 +58,9 @@ carry zero OTel overhead.
 
 ## View it
 
+**Dashboard: [SLO — Redirect Latency](http://localhost:7080/d/slo-redirect-latency/slo-e28094-redirect-latency)**
+— the one to open first: SLI, error budget remaining, and burn rate by window.
+
 **Dashboard: [OTel Pipeline Health](http://localhost:7080/d/otel-pipeline-health/otel-pipeline-health)**
 — `http://localhost:7080/d/otel-pipeline-health/otel-pipeline-health`
 
@@ -98,6 +101,45 @@ Two consequences, both now in the spec:
   in-process and don't drop per event. A trace explains a spike; it can't count one.
 - **The fix is sampling, not a bigger queue** — a bigger queue only moves the cliff.
 
+## Burn-rate alerts
+
+`prometheus/rules.yml` records the error ratio at five windows and pairs them
+into multi-window, multi-burn-rate alerts (Google SRE workbook style). Each
+alert needs a **long** window (is this real?) *and* a **short** one (is it still
+happening?) — the long one rejects brief spikes, the short one lets the alert
+clear promptly on recovery instead of smouldering.
+
+| Alert | Burn | Long / short | Meaning | Severity |
+|---|---|---|---|---|
+| `RedirectLatencyBudgetBurnCritical` | 14.4× | 1h / 5m | 2% of the 30d budget per hour — gone in ~2 days | page |
+| `RedirectLatencyBudgetBurnHigh` | 6× | 6h / 30m | 5% per 6h — working hours, not 3am | warning |
+| `RedirectLatencyBudgetBurnSlow` | 1× | 3d / 6h | exactly sustainable, so no headroom for a real incident | ticket |
+| `RedirectLatencySLIMissing` | — | 10m | the SLI has no data at all | warning |
+
+### The blind spot this makes visible
+
+The SLI filters to `status="302"`, so in a **total outage it goes absent, not
+bad** — every request 500s, leaving no successful redirects to be slow, and a
+latency-only dashboard stays serenely green while the service is down.
+`RedirectLatencySLIMissing` is the stopgap that surfaces it. The real fix is a
+separate availability SLO, which this build has not yet written.
+
+### Testing the alerts
+
+An alert that has never fired is a wish. Rather than melting the service to find
+out, the rules are unit-tested against synthetic series:
+
+```bash
+podman run --rm --entrypoint promtool \
+  -v "$PWD/infra/observability/prometheus:/p:ro" -w /p \
+  docker.io/prom/prometheus:v3.2.1 test rules rules_test.yml
+```
+
+Four cases, all passing: a 20× burn fires critical; healthy traffic (0.1× burn)
+fires nothing; an 8× burn fires *high* but **not** critical — the case that
+catches a copy-paste error between the two expressions; and an absent SLI trips
+the guard.
+
 ## Verify the pipeline
 
 The Collector's own telemetry is the source of truth for "did my data arrive":
@@ -127,7 +169,7 @@ recently" — it is immune to both the reset and the stale series.
 | 1 — Collector + Prometheus + Grafana, traces over OTLP, pipeline-health dashboard | ✅ done |
 | 3 — prom-client → OTel metrics + latency histogram w/ 50 ms bucket | ✅ done |
 | 2 — Tempo; traces visible in Grafana | ⬜ |
-| 4 — SLI recording rule + multi-window burn-rate alert + SLO dashboard | ⬜ |
+| 4 — SLI recording rule + multi-window burn-rate alert + SLO dashboard | ✅ done |
 | 5 — k6 load + game-day (kill Redis, spike → trace → log) | ⬜ |
 
 Slice 3 jumped ahead of slice 2 deliberately: once traces proved lossy under

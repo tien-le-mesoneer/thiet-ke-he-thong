@@ -1,0 +1,147 @@
+# SLO: 99% of redirects served in under 50 ms, over a 30-day window.
+#
+# The SLI is COUNTED, never interpolated: good/total taken from the histogram
+# bucket whose boundary sits exactly on the threshold. See
+# apps/url-shortener-node/src/otel.ts (LATENCY_BUCKETS_S) — deleting the 0.05
+# boundary silently inflates the reported burn by ~2.5x.
+
+groups:
+  # ------------------------------------------------------------------
+  # 1. The SLI, recorded at every window the burn-rate alerts need.
+  # ------------------------------------------------------------------
+  - name: slo_redirect_latency_sli
+    interval: 30s
+    rules:
+      # Error ratio = fraction of successful redirects SLOWER than 50 ms.
+      # Recorded rather than inlined so every alert below shares one definition
+      # of "bad" — a burn-rate alert whose windows disagree about the SLI is
+      # worse than no alert.
+      - record: slo:redirect_latency_errors:ratio_rate5m
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{route="/:code",status="302",le="0.05"}[5m]))
+            /
+            sum(rate(http_request_duration_seconds_count{route="/:code",status="302"}[5m]))
+          )
+      - record: slo:redirect_latency_errors:ratio_rate30m
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{route="/:code",status="302",le="0.05"}[30m]))
+            /
+            sum(rate(http_request_duration_seconds_count{route="/:code",status="302"}[30m]))
+          )
+      - record: slo:redirect_latency_errors:ratio_rate1h
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{route="/:code",status="302",le="0.05"}[1h]))
+            /
+            sum(rate(http_request_duration_seconds_count{route="/:code",status="302"}[1h]))
+          )
+      - record: slo:redirect_latency_errors:ratio_rate6h
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{route="/:code",status="302",le="0.05"}[6h]))
+            /
+            sum(rate(http_request_duration_seconds_count{route="/:code",status="302"}[6h]))
+          )
+      - record: slo:redirect_latency_errors:ratio_rate3d
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{route="/:code",status="302",le="0.05"}[3d]))
+            /
+            sum(rate(http_request_duration_seconds_count{route="/:code",status="302"}[3d]))
+          )
+
+      # Convenience: burn rate = error ratio / (1 - SLO). 1.0 means the budget
+      # is being spent exactly as fast as the 30-day window replenishes it.
+      - record: slo:redirect_latency:burnrate1h
+        expr: slo:redirect_latency_errors:ratio_rate1h / 0.01
+      - record: slo:redirect_latency:burnrate6h
+        expr: slo:redirect_latency_errors:ratio_rate6h / 0.01
+
+  # ------------------------------------------------------------------
+  # 2. Multi-window, multi-burn-rate alerts (Google SRE workbook).
+  #
+  # Each alert pairs a LONG window (is this real?) with a SHORT one (is it
+  # still happening?). The long window rejects brief spikes; the short one
+  # makes the alert stop firing promptly once things recover, instead of
+  # smouldering for the length of the long window.
+  # ------------------------------------------------------------------
+  - name: slo_redirect_latency_burn
+    interval: 30s
+    rules:
+      # 14.4x burn consumes 2% of a 30-day budget in 1 hour.
+      - alert: RedirectLatencyBudgetBurnCritical
+        expr: |
+          slo:redirect_latency_errors:ratio_rate1h > (14.4 * 0.01)
+          and
+          slo:redirect_latency_errors:ratio_rate5m > (14.4 * 0.01)
+        for: 2m
+        labels:
+          severity: critical
+          slo: redirect-latency
+        annotations:
+          summary: "Redirect latency budget burning 14.4x — 2% of the 30d budget per hour"
+          description: >-
+            More than 14.4% of successful redirects are slower than 50 ms over
+            the last hour, and still are over the last 5 minutes. At this rate
+            the entire 30-day error budget is gone in about 2 days.
+
+      # 6x burn consumes 5% of the budget in 6 hours.
+      - alert: RedirectLatencyBudgetBurnHigh
+        expr: |
+          slo:redirect_latency_errors:ratio_rate6h > (6 * 0.01)
+          and
+          slo:redirect_latency_errors:ratio_rate30m > (6 * 0.01)
+        for: 15m
+        labels:
+          severity: warning
+          slo: redirect-latency
+        annotations:
+          summary: "Redirect latency budget burning 6x — 5% of the 30d budget per 6h"
+          description: >-
+            Slower than the critical alert but well above sustainable. Worth
+            looking at during working hours rather than at 3am.
+
+      # 1x burn is exactly the sustainable rate; sustained, it exhausts the
+      # budget precisely at the end of the window and leaves no room for a
+      # real incident. A ticket, not a page.
+      - alert: RedirectLatencyBudgetBurnSlow
+        expr: |
+          slo:redirect_latency_errors:ratio_rate3d > (1 * 0.01)
+          and
+          slo:redirect_latency_errors:ratio_rate6h > (1 * 0.01)
+        for: 1h
+        labels:
+          severity: ticket
+          slo: redirect-latency
+        annotations:
+          summary: "Redirect latency budget on track to fully exhaust in 30 days"
+          description: >-
+            No headroom left for an actual incident. Investigate before the
+            next one arrives.
+
+  # ------------------------------------------------------------------
+  # 3. Guard: the SLI must exist.
+  #
+  # A latency SLI filtered to status="302" goes ABSENT, not bad, during a
+  # total outage — every request 500s, so there are no successful redirects
+  # to be slow. Without this the dashboards would look serenely green while
+  # the service is down. The real fix is a separate availability SLO; this
+  # is the stopgap that makes the gap visible.
+  # ------------------------------------------------------------------
+  - name: slo_redirect_latency_meta
+    interval: 30s
+    rules:
+      - alert: RedirectLatencySLIMissing
+        expr: absent(slo:redirect_latency_errors:ratio_rate5m)
+        for: 10m
+        labels:
+          severity: warning
+          slo: redirect-latency
+        annotations:
+          summary: "Redirect latency SLI has no data — cannot tell healthy from dead"
+          description: >-
+            No successful redirects recorded for 10 minutes. Either traffic
+            stopped or every request is failing. A latency SLO cannot
+            distinguish the two; check availability.
