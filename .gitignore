@@ -1,6 +1,9 @@
 node_modules/
 dist/
 .env
+# ...but the observability port map is config, not secrets, and the stack
+# does not reproduce without it.
+!infra/observability/.env
 *.log
 .codegraph/
 graphify-out/

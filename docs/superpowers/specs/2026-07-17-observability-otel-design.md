@@ -72,6 +72,7 @@ packages/observability-node/
 apps/deliveroo-node/                          # add otel preload + custom metrics; depend on @sd/observability-node
 apps/url-shortener-node/                      # migrate tracing.ts → shared bootstrap; port cache/id counters to OTel
 infra/observability/
+  .env                                        # host port map (7xxx block)
   compose.yaml                                # otel-collector, prometheus, tempo, grafana
   otel-collector-config.yaml                  # OTLP receivers + postgresql/mongodb/redis receivers; export to prometheus+tempo
   prometheus/prometheus.yml                   # scrape the Collector; load rules
@@ -87,7 +88,7 @@ infra/observability/
 
 ### 1. `packages/observability-node` — shared OTel bootstrap
 - One responsibility: configure OTel once for any Node service.
-- Reads `OTEL_SERVICE_NAME` and `OTEL_EXPORTER_OTLP_ENDPOINT` (default `http://localhost:4318`) from env.
+- Reads `OTEL_SERVICE_NAME` and `OTEL_EXPORTER_OTLP_ENDPOINT` from env. The stack publishes OTLP on the host at **7318** (HTTP) / **7317** (gRPC) — see `infra/observability/.env` for the full 7xxx port map — so the apps set the endpoint explicitly rather than relying on the SDK's `localhost:4318` default.
 - Starts `NodeSDK` with `getNodeAutoInstrumentations()` (HTTP/Fastify, `pg`, `mongodb`, `ioredis`) → traces + HTTP server RED metrics with no per-route code.
 - Injects `trace_id`/`span_id` into pino logs (`@opentelemetry/instrumentation-pino` or a manual log hook).
 - Guarded: a no-op unless `OTEL_ENABLED=1`, so tests/dev stay quiet (reuses the pattern already proven in url-shortener's `tracing.ts`).
