@@ -1,0 +1,56 @@
+# OTel Collector — the single ingestion point for every Node service.
+# Slice 1 scope: prove OTLP arrives. Traces go to the debug exporter (stdout);
+# Tempo replaces that in slice 2. Metrics are already exposed for Prometheus.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Batching is what keeps telemetry export off the request path.
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+exporters:
+  # App metrics, re-exposed for Prometheus to scrape.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    # Keeps service.name/service.version as labels instead of dropping them.
+    resource_to_telemetry_conversion:
+      enabled: true
+  # Slice 1 trace sink: print spans so we can see them arrive without Tempo.
+  debug:
+    verbosity: detailed
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      # Bind the Collector's own metrics to 0.0.0.0 so Prometheus (a different
+      # container) can reach them; the default localhost bind is unreachable.
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888

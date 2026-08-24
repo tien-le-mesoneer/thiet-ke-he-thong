@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 15s
+
+# rule_files is wired in slice 4 (SLI recording rule + burn-rate alert).
+
+scrape_configs:
+  # App metrics, forwarded by the Collector's prometheus exporter.
+  - job_name: otel-collector-apps
+    static_configs:
+      - targets: ["otel-collector:8889"]
+
+  # The Collector's own health: how many spans/points it accepted vs dropped.
+  # If app metrics ever look wrong, check here first.
+  - job_name: otel-collector-self
+    static_configs:
+      - targets: ["otel-collector:8888"]

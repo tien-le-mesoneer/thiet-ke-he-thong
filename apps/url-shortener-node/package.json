@@ -1,19 +1,20 @@
 {
   "name": "url-shortener-node",
   "version": "0.1.0",
-  "description": "URL shortener service — DDIA ch.1 scalability/maintainability practice",
+  "description": "URL shortener service \u2014 DDIA ch.1 scalability/maintainability practice",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "dev:otel": "OTEL_ENABLED=1 tsx watch --import ./src/tracing.ts src/index.ts",
+    "dev:otel": "OTEL_ENABLED=1 OTEL_SERVICE_NAME=url-shortener tsx watch --import ./src/tracing.ts src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "start:otel": "OTEL_ENABLED=1 node --import ./dist/tracing.js dist/index.js",
+    "start:otel": "OTEL_ENABLED=1 OTEL_SERVICE_NAME=url-shortener node --import ./dist/tracing.js dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-test-module-mocks --test --test-concurrency=1 --import tsx test/*.test.ts"
   },
   "dependencies": {
     "@opentelemetry/auto-instrumentations-node": "^0.55.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.57.2",
     "@opentelemetry/sdk-node": "^0.57.0",
     "fastify": "^5.2.0",
     "ioredis": "^5.4.0",

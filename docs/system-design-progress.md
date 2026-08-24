@@ -1,11 +1,11 @@
 ---
 plan_week: 1
-elapsed_week: 1
+elapsed_week: 7
 phase: 1
 active_impl: node
 started: 2026-07-12
 exercises_done: [url-shortener]
-weak_concepts: [capacity-estimation, right-sizing]
+weak_concepts: [capacity-estimation, right-sizing, tail-latency-amplification]
 ---
 ## Log
 - 2026-07-12: Progress file created. Study plan started.
@@ -13,3 +13,7 @@ weak_concepts: [capacity-estimation, right-sizing]
 - 2026-07-13 Week 1 (reading): full reliability explanation via ask mode; user confirmed solid → cleared weak_concept human-and-software-faults. Saved reliability summary to notebook as a note.
 - 2026-07-13 Week 1 (build): W1.migrations GREEN — reused local Postgres (created role app + db deliveroo), migration applied all 4 module schemas. Fixed esbuild platform-binary mismatch (reinstalled node_modules) which also unblocks npm dev/test. Week 1 build fully green.
 - 2026-07-15 Week 1 (exercise): URL shortener attempt graded (avg ~B). Strengths: structure, bottleneck spotting, obfuscated-id instinct. Fixes: storage units 1000× off, NFR-vs-estimate mismatch, 301→302, right-size DB (single Postgres, not NoSQL). exercises_done += url-shortener; weak: capacity-estimation, right-sizing. User wants to build it as a real service in the practice project (next: brainstorm apps/url-shortener).
+- 2026-08-24 Week 1 (reading): taught percentiles & tail latency (DDIA ch.1 "Describing Performance", pp. 13-16) with per-topic source refs. Quiz Q2 re-posed but still UNANSWERED; Q3 never written. weak: tail-latency-amplification.
+- 2026-08-24 (bookkeeping): elapsed_week corrected 1 -> 7 (started 2026-07-12, 6 weeks wall-clock). plan_week stays 1; slippage = +6.
+- 2026-08-24 (pivot): user moved focus to monitoring/observability (syllabus Week 14). Running it as a PARALLEL TRACK against apps/url-shortener-node rather than bumping plan_week, because the Week-14 build assumes the deliveroo saga chain (W2.enforced still RED). Resolved the 2 blocked decisions in the OTel spec: (1) full OTel SDK -> OTLP -> Collector migration, dropping prom-client /metrics; (2) first SLO = p99 latency (99% of redirects < 50ms/30d), availability demoted to a panel. Spec updated.
+- 2026-08-24 Week 14 (parallel track, slice 1/5): observability stack GREEN. New infra/observability/ (OTel Collector 0.121.0 + Prometheus 3.2.1 + Grafana 11.5.2, podman compose). url-shortener src/tracing.ts switched ConsoleSpanExporter -> OTLP; dev:otel/start:otel now set OTEL_SERVICE_NAME. Verified end-to-end: POST /api/v1/urls + redirect (302) produced HTTP + mongodb spans with service.name=url-shortener; otelcol_receiver_accepted_spans_total=14 == otelcol_exporter_sent_spans_total=14 (zero dropped). App suite 23/23 green with OTEL unset (zero-overhead default holds). Next: slice 2 (Tempo).

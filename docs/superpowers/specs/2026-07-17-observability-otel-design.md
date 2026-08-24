@@ -1,7 +1,7 @@
 # Application-Wide Observability (OpenTelemetry-first) — Design Spec
 
 **Date:** 2026-07-17
-**Status:** Approved design, pending implementation plan
+**Status:** Approved design, open decisions resolved 2026-08-24, pending implementation plan
 **Scope:** Monorepo-wide — `apps/deliveroo-node`, `apps/url-shortener-node`, a new shared `packages/observability-node`, and a new `infra/observability/` stack.
 
 ## Purpose
@@ -106,8 +106,12 @@ infra/observability/
 - **Grafana:** provisioned Prometheus + Tempo datasources; provisioned dashboards; exemplars enabled so p99 panels link to traces.
 
 ### 4. SLO + burn-rate alert
-- Define **one SLO**: url-shortener redirect availability (non-5xx) ≥ 99.9% over 30 days (or p99 < 50 ms — pick availability as the SLI).
+- Define **one SLO** (decided 2026-08-24): url-shortener redirect **latency** — 99% of redirects served in < 50 ms over 30 days. The SLI is a latency percentile, not availability, so the pipeline exercises histogram buckets and tail behaviour end-to-end.
+  - Baseline: k6 measured p99 = 18.06 ms, so 50 ms is a real target with headroom rather than a number that is green by construction.
+  - **Latency SLIs are counted, not averaged.** The SLI is `good / total` where *good* = requests in buckets ≤ 50 ms, taken from an OTel **explicit-bucket histogram** with a boundary exactly at the threshold. Never `avg()` or `quantile()` a p99 across instances or windows — recompute from summed bucket counts.
+  - Bucket boundaries must straddle the target, e.g. `[5, 10, 25, 50, 100, 250, 500, 1000] ms`; a missing 50 ms boundary makes the SLI uncomputable.
 - `rules.yml`: a recording rule for the SLI + a **multi-window multi-burn-rate** alert (fast + slow windows, Google-SRE style) that fires on error-budget burn. Surfaced in the SLO dashboard; no external routing.
+- Availability stays a **dashboard panel**, not the SLO — tracked, but not the thing with an error budget.
 
 ### 5. Game-day
 - `gameday.md` + a script: with the stack + apps + k6 load running, kill Redis (and/or inject latency), and observe: the SLO burn-rate panel reacting, the USE cache-hit/saturation signal dropping, and the failing request's trace in Tempo. Confirms the pipeline answers "what broke and why" end-to-end.
@@ -133,6 +137,11 @@ exemplar jumps to the trace; the trace_id greps the logs.
 - **Collector config validation:** `otelcol validate` (or container `--dry-run`) on `otel-collector-config.yaml`.
 - **Stack smoke test:** bring up the stack + one app with `OTEL_ENABLED=1`, drive one request, assert (a) the service appears as a Prometheus target/metric, (b) a trace lands in Tempo, (c) the log line carries a `trace_id`.
 - **Game-day is the integration test** for the SLO/alert path (manual, documented).
+
+## Decisions (resolved 2026-08-24)
+
+- **url-shortener metrics path — full OTel migration.** The OTel SDK exports traces + metrics over OTLP to the Collector; the prom-client `/metrics` route is removed rather than kept alongside. One instrumentation contract, one pipeline. Cost accepted: the existing prom-client instrumentation is rewritten, and the k6 dashboards are re-pointed at the Prometheus metrics the Collector exposes.
+- **First SLO — p99 latency** (see §4). Availability is demoted to a dashboard panel.
 
 ## Open questions
 

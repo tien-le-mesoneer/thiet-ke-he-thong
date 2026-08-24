@@ -1,0 +1,63 @@
+# Monorepo-wide observability stack.
+#
+# Services run on the HOST (npm run dev:otel) and export OTLP to the Collector
+# on localhost:4318. Only the backends are containerised.
+#
+#   podman compose -f infra/observability/compose.yaml up -d
+#
+# Slice 1: Collector + Prometheus + Grafana. Tempo lands in slice 2.
+
+name: sd-observability
+
+services:
+  otel-collector:
+    image: docker.io/otel/opentelemetry-collector-contrib:0.121.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4317:4317"    # OTLP gRPC   (app -> collector)
+      - "4318:4318"    # OTLP HTTP   (app -> collector)
+      - "8889:8889"    # app metrics (prometheus -> collector)
+      - "13133:13133"  # health
+    healthcheck:
+      test: ["CMD", "/otelcol-contrib", "--version"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  prometheus:
+    image: docker.io/prom/prometheus:v3.2.1
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      # Required for exemplars (metric spike -> trace) in slice 2.
+      - "--enable-feature=exemplar-storage"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otel-collector
+
+  grafana:
+    image: docker.io/grafana/grafana:11.5.2
+    environment:
+      # Local-only stack: skip the login wall.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_FEATURE_TOGGLES_ENABLE: "traceqlEditor"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3002:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus-data:
+  grafana-data:
