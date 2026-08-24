@@ -107,7 +107,7 @@ infra/observability/
 
 ### 4. SLO + burn-rate alert
 - Define **one SLO** (decided 2026-08-24): url-shortener redirect **latency** — 99% of redirects served in < 50 ms over 30 days. The SLI is a latency percentile, not availability, so the pipeline exercises histogram buckets and tail behaviour end-to-end.
-  - Baseline: k6 measured p99 = 18.06 ms, so 50 ms is a real target with headroom rather than a number that is green by construction.
+  - Baseline: k6 measured p99 = 18.06 ms at low load, but a 2026-08-24 ramp to 200 VUs (980k requests, 8,166 req/s) measured **p99 = 41.65 ms — 83% of the 50 ms budget**. The target is real but the headroom is thin at peak, so the burn-rate alert in slice 4 will actually have something to fire on. Distribution from that run: mean 11.4 ms, p50 9.92 ms, p90 21.04 ms, p95 25.94 ms, p99 41.65 ms, max 145.19 ms — the mean sits next to the median and says nothing about the tail, which is the whole argument for percentile SLIs.
   - **Latency SLIs are counted, not averaged.** The SLI is `good / total` where *good* = requests in buckets ≤ 50 ms, taken from an OTel **explicit-bucket histogram** with a boundary exactly at the threshold. Never `avg()` or `quantile()` a p99 across instances or windows — recompute from summed bucket counts.
   - Bucket boundaries must straddle the target, e.g. `[5, 10, 25, 50, 100, 250, 500, 1000] ms`; a missing 50 ms boundary makes the SLI uncomputable.
 - `rules.yml`: a recording rule for the SLI + a **multi-window multi-burn-rate** alert (fast + slow windows, Google-SRE style) that fires on error-budget burn. Surfaced in the SLO dashboard; no external routing.
@@ -127,6 +127,10 @@ exemplar jumps to the trace; the trace_id greps the logs.
 
 - **`OTEL_ENABLED` unset → full no-op** (SDK never starts); existing test suites stay green with zero OTel overhead.
 - **Collector down** → app OTLP export fails silently (batch dropped); the app keeps serving. Never let telemetry failure break request handling.
+- **Span loss under load is real and silent.** Measured 2026-08-24: at 8,166 req/s the app emitted 1.00 span per redirect, so 980,125 requests should have produced 980,125 spans; the Collector accepted **718,942 — 26.6% dropped**, with `otelcol_receiver_refused_spans_total = 0` and `otelcol_exporter_send_failed_spans_total = 0`. Nothing was lost in the Collector; the loss is app-side, in the SDK's `BatchSpanProcessor` queue (default `maxQueueSize` 2048), and it logs nothing by default.
+  - **Consequence: traces must not be the source of truth for the SLI.** The SLI comes from metrics (histogram buckets), which are aggregated in-process and do not drop per-event. Traces are for explaining a spike, not for counting one.
+  - Mitigation is **sampling, not a bigger queue** — a `parentbased_traceidratio` sampler at a few percent under load, keeping 100% in dev. Raising `maxQueueSize` only moves the cliff.
+  - Add app-side SDK self-telemetry so the drop is visible instead of inferred by arithmetic.
 - **A DB down** → its Collector receiver reports the target down (visible as missing/zero USE metrics), which is itself signal.
 - **Cardinality guard:** route label uses the matched route template (never raw path) — carry forward the `?? "unknown"` fix so unmatched paths can't explode cardinality.
 
