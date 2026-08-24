@@ -35,6 +35,48 @@ cd apps/url-shortener-node && npm run dev:otel
 **Without `OTEL_ENABLED=1` the SDK never starts** — tests and plain `npm run dev`
 carry zero OTel overhead.
 
+## View it
+
+**Dashboard: [OTel Pipeline Health](http://localhost:3002/d/otel-pipeline-health/otel-pipeline-health)**
+— `http://localhost:3002/d/otel-pipeline-health/otel-pipeline-health`
+
+It answers one question: *is telemetry actually arriving?* It runs on the
+Collector's **own** self-telemetry, so it works before any app metrics exist.
+
+| Panel | Read it as |
+|---|---|
+| Spans accepted vs exported | the two lines must overlap; a gap = Collector dropping |
+| Spans lost inside the Collector | flat zero is healthy |
+| Spans accepted / dropped / uptime / RSS | at-a-glance stats; uptime resets = a crash |
+| Batch size sent | batches growing = pipeline saturating |
+| What triggered each batch send | timeout→size crossover = the "quiet → busy" moment |
+
+To put traffic through it:
+
+```bash
+cd apps/url-shortener-node
+npm run dev:otel &          # host app, OTLP -> localhost:4318
+k6 run load/redirect.js     # 2 min ramp to 200 VUs
+```
+
+### ⚠️ The dashboard cannot see the biggest drop
+
+"Spans lost inside the Collector" stays at **zero** while spans are being lost —
+because they never reach the Collector. Measured 2026-08-24:
+
+| load | requests | spans expected | accepted | **lost** |
+|---|---|---|---|---|
+| 6,956 req/s | 487,108 | 487,108 | 402,549 | **17.4%** |
+| 8,166 req/s | 980,125 | 980,125 | 718,942 | **26.6%** |
+
+All of it is app-side, in the SDK's `BatchSpanProcessor` queue (default
+`maxQueueSize` 2048), and **nothing logs a warning**. The loss scales with load.
+
+Two consequences, both now in the spec:
+- **The SLI must come from metrics, not traces.** Histograms aggregate
+  in-process and don't drop per event. A trace explains a spike; it can't count one.
+- **The fix is sampling, not a bigger queue** — a bigger queue only moves the cliff.
+
 ## Verify the pipeline
 
 The Collector's own telemetry is the source of truth for "did my data arrive":
@@ -55,7 +97,7 @@ not curl.
 
 | Slice | State |
 |---|---|
-| 1 — Collector + Prometheus + Grafana, traces over OTLP | ✅ done |
+| 1 — Collector + Prometheus + Grafana, traces over OTLP, pipeline-health dashboard | ✅ done |
 | 2 — Tempo; traces visible in Grafana | ⬜ next |
 | 3 — prom-client → OTel metrics + latency histogram w/ 50 ms bucket | ⬜ |
 | 4 — SLI recording rule + multi-window burn-rate alert + SLO dashboard | ⬜ |

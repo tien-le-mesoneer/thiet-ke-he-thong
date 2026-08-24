@@ -1,0 +1,340 @@
+{
+  "uid": "otel-pipeline-health",
+  "title": "OTel Pipeline Health",
+  "description": "Is telemetry actually arriving? Built on the Collector's own self-telemetry, so it works before any app metrics exist. Slice 1 of the observability build.",
+  "tags": [
+    "observability",
+    "slice-1"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Spans accepted vs exported",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "description": "These two lines must sit on top of each other. A gap means the Collector is dropping data.",
+      "targets": [
+        {
+          "expr": "sum(rate(otelcol_receiver_accepted_spans_total[1m]))",
+          "legendFormat": "accepted (in)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "expr": "sum(rate(otelcol_exporter_sent_spans_total[1m]))",
+          "legendFormat": "exported (out)",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Spans lost INSIDE the Collector",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "description": "Flat zero is healthy. If this rises, the Collector itself is the bottleneck.\n\nNOTE: app-side drops do NOT appear here. Measured 2026-08-24 with both these lines at zero: 17.4% of spans lost at 6,956 req/s, 26.6% at 8,166 req/s - all of it in the app's BatchSpanProcessor queue.",
+      "targets": [
+        {
+          "expr": "sum(rate(otelcol_receiver_refused_spans_total[1m]))",
+          "legendFormat": "refused (receiver)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "expr": "sum(rate(otelcol_exporter_send_failed_spans_total[1m]))",
+          "legendFormat": "send failed (exporter)",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Spans accepted (total)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Cumulative since Collector start.",
+      "targets": [
+        {
+          "expr": "sum(otelcol_receiver_accepted_spans_total)",
+          "legendFormat": "accepted",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Spans dropped in Collector (total)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 8,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Should stay 0.",
+      "targets": [
+        {
+          "expr": "sum(otelcol_receiver_refused_spans_total) + sum(otelcol_exporter_send_failed_spans_total)",
+          "legendFormat": "dropped",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Collector uptime",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Resets reveal a crashed/restarted Collector.",
+      "targets": [
+        {
+          "expr": "otelcol_process_uptime_seconds_total",
+          "legendFormat": "uptime",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "title": "Collector memory (RSS)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 8,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Watch this during load; memory pressure precedes drops.",
+      "targets": [
+        {
+          "expr": "otelcol_process_memory_rss_bytes",
+          "legendFormat": "rss",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "Batch size sent",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "description": "Spans per exported batch. send_batch_size (512) is a SOFT trigger, not a cap - a single OTLP request is never split, so observed batches run larger (p99 ~747 under load). Set send_batch_max_size to enforce a hard ceiling.\n\nThis panel is also the first real use of histogram_quantile() here - the same function the latency SLI will use in slice 4.",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(otelcol_processor_batch_batch_send_size_bucket[1m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(otelcol_processor_batch_batch_send_size_bucket[1m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "What triggered each batch send",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "description": "Idle traffic flushes on the 5s timeout. Under load the size trigger takes over - that crossover is the moment the pipeline goes from 'quiet' to 'busy'.",
+      "targets": [
+        {
+          "expr": "sum(rate(otelcol_processor_batch_batch_size_trigger_send_total[1m]))",
+          "legendFormat": "size cap hit (512)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "expr": "sum(rate(otelcol_processor_batch_timeout_trigger_send_total[1m]))",
+          "legendFormat": "timeout (5s)",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {}
+        },
+        "overrides": []
+      }
+    }
+  ]
+}
