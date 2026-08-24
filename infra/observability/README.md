@@ -125,14 +125,36 @@ recently" — it is immune to both the reset and the stale series.
 | Slice | State |
 |---|---|
 | 1 — Collector + Prometheus + Grafana, traces over OTLP, pipeline-health dashboard | ✅ done |
-| 2 — Tempo; traces visible in Grafana | ⬜ next |
-| 3 — prom-client → OTel metrics + latency histogram w/ 50 ms bucket | ⬜ |
+| 3 — prom-client → OTel metrics + latency histogram w/ 50 ms bucket | ✅ done |
+| 2 — Tempo; traces visible in Grafana | ⬜ |
 | 4 — SLI recording rule + multi-window burn-rate alert + SLO dashboard | ⬜ |
 | 5 — k6 load + game-day (kill Redis, spike → trace → log) | ⬜ |
 
-Until slice 3, **app metrics still come from prom-client on the app's own
-`/metrics`** and do not flow through the Collector — `localhost:8889` is
-legitimately empty right now.
+Slice 3 jumped ahead of slice 2 deliberately: once traces proved lossy under
+load, the metric path became the one the SLI depends on, and Tempo is only
+visualisation.
+
+## The SLI
+
+The SLO is **99% of redirects served in under 50 ms**. A latency SLI is
+**counted, not averaged** — `good / total`, where *good* is the bucket count at
+or below the threshold:
+
+```promql
+sum(http_request_duration_seconds_bucket{route="/:code",status="302",le="0.05"})
+/
+sum(http_request_duration_seconds_count{route="/:code",status="302"})
+```
+
+Measured 2026-08-24 over 322,924 requests at 8,070 req/s: **99.8943%** — passing,
+with 10.6% of the 1% error budget consumed.
+
+**Why counted rather than interpolated.** In the same window, k6 measured
+p99 = 15.74 ms client-side while `histogram_quantile()` reported 20.90 ms — a 33%
+gap, because interpolation guesses a position inside the `0.01 → 0.025` bucket.
+The counted ratio has no such error: it only ever asks "which side of 50 ms",
+and there is a boundary exactly there. Use `histogram_quantile` for dashboards
+and trends; never for the error budget.
 
 ## Note on the app-level stack
 

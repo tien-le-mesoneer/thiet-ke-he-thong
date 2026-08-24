@@ -111,6 +111,8 @@ infra/observability/
   - Baseline: k6 measured p99 = 18.06 ms at low load, but a 2026-08-24 ramp to 200 VUs (980k requests, 8,166 req/s) measured **p99 = 41.65 ms — 83% of the 50 ms budget**. The target is real but the headroom is thin at peak, so the burn-rate alert in slice 4 will actually have something to fire on. Distribution from that run: mean 11.4 ms, p50 9.92 ms, p90 21.04 ms, p95 25.94 ms, p99 41.65 ms, max 145.19 ms — the mean sits next to the median and says nothing about the tail, which is the whole argument for percentile SLIs.
   - **Latency SLIs are counted, not averaged.** The SLI is `good / total` where *good* = requests in buckets ≤ 50 ms, taken from an OTel **explicit-bucket histogram** with a boundary exactly at the threshold. Never `avg()` or `quantile()` a p99 across instances or windows — recompute from summed bucket counts.
   - Bucket boundaries must straddle the target, e.g. `[5, 10, 25, 50, 100, 250, 500, 1000] ms`; a missing 50 ms boundary makes the SLI uncomputable.
+  - **Implemented and measured 2026-08-24.** Buckets live in `apps/url-shortener-node/src/otel.ts` as `LATENCY_BUCKETS_S`, enforced by an OTel `View` with `ExplicitBucketHistogramAggregation`, and guarded by a unit test asserting the 0.05 boundary exists. First real reading over 322,924 requests at 8,070 req/s: **SLI = 99.8943%**, 10.6% of the error budget consumed.
+  - **Evidence that counting beats interpolating:** in that same window k6 measured p99 = 15.74 ms client-side while `histogram_quantile()` reported 20.90 ms — a 33% gap introduced by interpolating inside the `0.01 → 0.025` bucket. `histogram_quantile` is for dashboards; the error budget uses the counted ratio.
 - `rules.yml`: a recording rule for the SLI + a **multi-window multi-burn-rate** alert (fast + slow windows, Google-SRE style) that fires on error-budget burn. Surfaced in the SLO dashboard; no external routing.
 - Availability stays a **dashboard panel**, not the SLO — tracked, but not the thing with an error budget.
 
@@ -134,6 +136,7 @@ exemplar jumps to the trace; the trace_id greps the logs.
   - Add app-side SDK self-telemetry so the drop is visible instead of inferred by arithmetic.
 - **A DB down** → its Collector receiver reports the target down (visible as missing/zero USE metrics), which is itself signal.
 - **Cardinality guard:** route label uses the matched route template (never raw path) — carry forward the `?? "unknown"` fix so unmatched paths can't explode cardinality.
+- **Second cardinality guard, learned the hard way (2026-08-24):** the Collector's prometheus exporter must keep `resource_to_telemetry_conversion` **disabled**. Enabling it copies every resource attribute onto every series — `process_pid`, `process_command_args` (the full argv, hundreds of bytes), `process_executable_path`, `host_id` — taking each series from 1 label to 17, and `process_pid` alone mints a fresh time series on every restart. The exporter already derives `job=` from `service.name` and `instance=` from `service.instance.id`, which is the identity actually needed.
 
 ## Testing
 

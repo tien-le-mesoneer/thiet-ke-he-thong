@@ -5,22 +5,23 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "dev:otel": "OTEL_ENABLED=1 OTEL_SERVICE_NAME=url-shortener OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:7318 tsx watch --import ./src/tracing.ts src/index.ts",
+    "dev:otel": "OTEL_ENABLED=1 OTEL_SERVICE_NAME=url-shortener OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:7318 tsx watch --import ./src/otel.ts src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "start:otel": "OTEL_ENABLED=1 OTEL_SERVICE_NAME=url-shortener OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:7318 node --import ./dist/tracing.js dist/index.js",
+    "start:otel": "OTEL_ENABLED=1 OTEL_SERVICE_NAME=url-shortener OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:7318 node --import ./dist/otel.js dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-test-module-mocks --test --test-concurrency=1 --import tsx test/*.test.ts"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.55.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.57.2",
     "@opentelemetry/exporter-trace-otlp-http": "^0.57.2",
     "@opentelemetry/sdk-node": "^0.57.0",
     "fastify": "^5.2.0",
     "ioredis": "^5.4.0",
     "mongodb": "^6.12.0",
     "pino": "^9.5.0",
-    "prom-client": "^15.1.0",
     "sqids": "^0.3.0"
   },
   "devDependencies": {

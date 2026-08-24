@@ -20,9 +20,15 @@ exporters:
   # App metrics, re-exposed for Prometheus to scrape.
   prometheus:
     endpoint: 0.0.0.0:8889
-    # Keeps service.name/service.version as labels instead of dropping them.
+    # resource_to_telemetry_conversion is deliberately OFF. Turning it on
+    # copies EVERY resource attribute onto every series -- process_pid,
+    # process_command_args, process_executable_path, host_id -- which is a
+    # cardinality bomb: process_pid alone mints a fresh time series on every
+    # restart, and the full argv is a multi-hundred-byte label. The exporter
+    # already derives job= from service.name and instance= from
+    # service.instance.id, which is the identity we actually need.
     resource_to_telemetry_conversion:
-      enabled: true
+      enabled: false
   # Slice 1 trace sink: print spans so we can see them arrive without Tempo.
   debug:
     verbosity: detailed

@@ -21,7 +21,7 @@ export function makeAllocator(counterId = "url") {
     const top = res!.seq;                     // e.g. 1000
     next = top - config.idBlockSize + 1;      // 1
     max = top;                                // 1000
-    idBlocks.inc();
+    idBlocks.add(1);
   }
 
   return {
