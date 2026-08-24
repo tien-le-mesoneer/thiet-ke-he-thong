@@ -149,12 +149,18 @@ sum(http_request_duration_seconds_count{route="/:code",status="302"})
 Measured 2026-08-24 over 322,924 requests at 8,070 req/s: **99.8943%** — passing,
 with 10.6% of the 1% error budget consumed.
 
-**Why counted rather than interpolated.** In the same window, k6 measured
-p99 = 15.74 ms client-side while `histogram_quantile()` reported 20.90 ms — a 33%
-gap, because interpolation guesses a position inside the `0.01 → 0.025` bucket.
-The counted ratio has no such error: it only ever asks "which side of 50 ms",
-and there is a boundary exactly there. Use `histogram_quantile` for dashboards
-and trends; never for the error budget.
+**Why counted rather than interpolated.** Not because interpolation is wildly
+inaccurate — on matched data (364,240 requests, k6 `p(99)=22.47 ms`)
+`histogram_quantile` returns 22.82 ms, off by just 1.6%.
+
+The reason is **bucket width**. Interpolation assumes latency is uniformly
+distributed inside a bucket; it never is. With the 50 ms boundary present the
+SLI is counted exactly — 363,609 / 364,240 = 99.8268%, **17.3%** of budget.
+Delete that one boundary and the enclosing bucket becomes `0.025 → 0.1`;
+interpolating the same SLI yields 99.5633%, or **43.7%** of budget. Identical
+data, **2.5× the reported burn** — and that factor grows with the bucket.
+
+Use `histogram_quantile` for dashboards and trends; never for the error budget.
 
 ## Note on the app-level stack
 
