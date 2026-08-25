@@ -29,9 +29,13 @@ exporters:
     # service.instance.id, which is the identity we actually need.
     resource_to_telemetry_conversion:
       enabled: false
-  # Slice 1 trace sink: print spans so we can see them arrive without Tempo.
-  debug:
-    verbosity: detailed
+  # Traces land in Tempo, which Grafana queries. Replaces the slice-1 debug
+  # exporter -- printing spans to stdout proved they arrived but made them
+  # impossible to search, which is exactly what a game-day needs.
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true   # local compose network, no certs in play
 
 extensions:
   health_check:
@@ -43,7 +47,7 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [debug]
+      exporters: [otlp/tempo]
     metrics:
       receivers: [otlp]
       processors: [batch]

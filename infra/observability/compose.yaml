@@ -39,6 +39,8 @@ services:
       - "--storage.tsdb.path=/prometheus"
       # Required for exemplars (metric spike -> trace) in slice 2.
       - "--enable-feature=exemplar-storage"
+      # Tempo's metrics_generator pushes span-derived RED metrics in.
+      - "--web.enable-remote-write-receiver"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/rules.yml:/etc/prometheus/rules.yml:ro
@@ -47,6 +49,16 @@ services:
       - "${OBS_PROMETHEUS_PORT:-7090}:9090"
     depends_on:
       - otel-collector
+
+  tempo:
+    image: docker.io/grafana/tempo:2.7.1
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    user: "0:0"   # needs to own /var/tempo; single-binary local storage
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "${OBS_TEMPO_PORT:-7200}:3200"   # Grafana queries this; no UI of its own
 
   grafana:
     image: docker.io/grafana/grafana:11.5.2
@@ -64,7 +76,9 @@ services:
       - "${OBS_GRAFANA_PORT:-7080}:3000"
     depends_on:
       - prometheus
+      - tempo
 
 volumes:
   prometheus-data:
   grafana-data:
+  tempo-data:

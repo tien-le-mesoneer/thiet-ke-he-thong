@@ -7,8 +7,8 @@ Monorepo-wide telemetry backend. Implements
 OTLP to `localhost:7318`, the Collector fans out from there.
 
 ```
-apps (host, OTEL_ENABLED=1) ──OTLP:7318──► OTel Collector ──► debug (stdout)   [traces, slice 1]
-                                                 │
+apps (host, OTEL_ENABLED=1) ──OTLP:7318──► OTel Collector ──► Tempo ──┐
+                                                 │                    ▼
                                                  └─:7889──► Prometheus ──► Grafana
 ```
 
@@ -44,6 +44,7 @@ podman compose -f infra/observability/compose.yaml up -d
 | Grafana | http://localhost:7080 | anonymous admin, no login |
 | Prometheus | http://localhost:7090 | |
 | Collector OTLP | `localhost:7318` (HTTP), `7317` (gRPC) | what apps export to |
+| Tempo | http://localhost:7200 | trace storage; query it via Grafana, it has no UI |
 | Collector health | http://localhost:7133 | |
 
 Then start an instrumented app:
@@ -82,6 +83,28 @@ cd apps/url-shortener-node
 npm run dev:otel &          # host app, OTLP -> localhost:7318
 k6 run load/redirect.js     # 2 min ramp to 200 VUs
 ```
+
+### The span loss had a surprising cause
+
+Slice 1 measured 26.6% of spans vanishing app-side and blamed the SDK's
+`BatchSpanProcessor` queue. Half right. Re-measured after slice 2 pointed traces
+at Tempo — same app, same SDK, same 2048-span queue, **100% sampling**:
+
+| traces exported to | throughput | requests | spans arrived | lost |
+|---|---|---|---|---|
+| `debug` (stdout, verbose) | 8,166 req/s | 980,125 | 718,942 | **26.6%** |
+| Tempo (OTLP gRPC) | 10,466 req/s | 471,176 | 471,177 | **0%** |
+
+Higher load, zero loss. The `debug` exporter was formatting every span to stdout,
+throttling the Collector, which backpressured the app until its queue overflowed.
+**The debugging aid was the bottleneck.**
+
+Sampling is still wired up (`npm run load:otel`, 10% default, measured 9.93%) —
+now for cost rather than correctness.
+
+⚠️ **`tsx watch` does not propagate the sampler env** to the server it re-spawns,
+so `dev:otel` always traces at 100%. That is why `load:otel` exists as a separate
+non-watch script — use it for load tests and the game-day.
 
 ### ⚠️ The dashboard cannot see the biggest drop
 
@@ -168,7 +191,7 @@ recently" — it is immune to both the reset and the stale series.
 |---|---|
 | 1 — Collector + Prometheus + Grafana, traces over OTLP, pipeline-health dashboard | ✅ done |
 | 3 — prom-client → OTel metrics + latency histogram w/ 50 ms bucket | ✅ done |
-| 2 — Tempo; traces visible in Grafana | ⬜ |
+| 2 — Tempo; traces visible in Grafana | ✅ done |
 | 4 — SLI recording rule + multi-window burn-rate alert + SLO dashboard | ✅ done |
 | 5 — k6 load + game-day (kill Redis, spike → trace → log) | ⬜ |
 
