@@ -36,7 +36,7 @@ any of them in [`.env`](.env).
 ## Run
 
 ```bash
-podman compose -f infra/observability/compose.yaml up -d
+podman compose up -d      # from the repo root
 ```
 
 | Service | URL | Notes |

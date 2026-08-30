@@ -8,18 +8,19 @@ driver; migrations are plain SQL files in `migrations/`, applied by
 ## Run
 
 ```bash
-podman compose -f apps/deliveroo-node/compose.yaml start
+podman compose up -d postgres         # from the repo root
 npm run migrate
 npm run dev
-npm test
+npm test   # runs against deliveroo_test, never the dev database
 ```
 
 ## Status
 
-Earlier along than `url-shortener-node`. Week-1 acceptance (`W1.migrations`) is
-green; **`W2.enforced` is still RED**. Concepts and checks live in
-`acceptance.node.md` and `docs/system-design-acceptance.md`, driven by
-`/learn-sd`.
+Earlier along than `url-shortener-node`. Week-1 acceptance and Week-2
+(`W2.enforced`, `W2.tests-exist`, `W2.flow`) are green; Week 3 is next — the
+stock race condition in `placeOrder` is still deliberately open. Concepts and
+checks live in `acceptance.node.md` and `docs/system-design-acceptance.md`,
+driven by `/learn-sd`.
 
 Not yet instrumented. The observability spec plans an OTel preload here once the
 saga chain exists — until then there is no distributed trace worth collecting.

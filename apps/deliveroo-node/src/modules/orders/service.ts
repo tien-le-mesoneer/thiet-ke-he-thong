@@ -1,7 +1,8 @@
-import { pool, withTransaction } from "../../db.js";
+import { pool, withTransaction, type Queryable } from "../../db.js";
 import { chargePayment } from "../payments/service.js";
 
-// Explicit state machine (Week 2 task: enforce transitions, add tests)
+// Explicit state machine. Every write to orders.orders.status goes through
+// transitionOrder below, so an unlisted edge is impossible by construction.
 const TRANSITIONS: Record<string, readonly string[]> = {
   PLACED: ["PAYMENT_PENDING", "CANCELLED"],
   PAYMENT_PENDING: ["PAID", "CANCELLED"],
@@ -13,6 +14,41 @@ const TRANSITIONS: Record<string, readonly string[]> = {
 
 export function canTransition(from: string, to: string): boolean {
   return TRANSITIONS[from]?.includes(to) ?? false;
+}
+
+/** Thrown when a caller asks for a move the state machine does not allow. */
+export class IllegalTransitionError extends Error {
+  constructor(
+    readonly from: string,
+    readonly to: string,
+  ) {
+    super(`illegal order transition: ${from} -> ${to}`);
+    this.name = "IllegalTransitionError";
+  }
+}
+
+/**
+ * The only place `orders.orders.status` is ever written. Two guards, on purpose:
+ * the state machine rejects the move before it reaches the database, and the
+ * `status = $3` predicate makes the UPDATE a compare-and-set, so a row someone
+ * else has already moved is not silently overwritten.
+ */
+export async function transitionOrder(
+  tx: Queryable,
+  orderId: string,
+  from: string,
+  to: string,
+): Promise<Record<string, unknown>> {
+  if (!canTransition(from, to)) throw new IllegalTransitionError(from, to);
+
+  const { rows } = await tx.query(
+    `UPDATE orders.orders SET status = $1, updated_at = now()
+      WHERE id = $2 AND status = $3 RETURNING *`,
+    [to, orderId, from],
+  );
+  const row = rows[0];
+  if (!row) throw new Error(`order ${orderId} is no longer in status ${from}`);
+  return row as Record<string, unknown>;
 }
 
 interface PlaceOrderInput {
@@ -62,9 +98,11 @@ export async function placeOrder(
       priced.push({ ...item, priceCents: row.price_cents });
     }
 
+    // Born PLACED (the column default) so every later status is reached through
+    // the state machine instead of being written straight into the INSERT.
     const { rows: orderRows } = await tx.query(
-      `INSERT INTO orders.orders (user_id, restaurant_id, status, total_cents, idempotency_key)
-       VALUES ($1, $2, 'PAYMENT_PENDING', $3, $4) RETURNING *`,
+      `INSERT INTO orders.orders (user_id, restaurant_id, total_cents, idempotency_key)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
       [input.userId, input.restaurantId, totalCents, idempotencyKey],
     );
     const order = orderRows[0];
@@ -77,15 +115,13 @@ export async function placeOrder(
       );
     }
 
+    await transitionOrder(tx, order.id, "PLACED", "PAYMENT_PENDING");
+
     // NOTE: calling payments inside the order transaction couples them — fine for
     // a monolith, and exactly the coupling you'll break apart with a saga in Phase 3.
     const payment = await chargePayment(tx, order.id, totalCents);
     const nextStatus = payment.status === "COMPLETED" ? "PAID" : "CANCELLED";
-    const { rows: updated } = await tx.query(
-      "UPDATE orders.orders SET status = $1, updated_at = now() WHERE id = $2 RETURNING *",
-      [nextStatus, order.id],
-    );
-    return updated[0];
+    return transitionOrder(tx, order.id, "PAYMENT_PENDING", nextStatus);
   });
 }
 

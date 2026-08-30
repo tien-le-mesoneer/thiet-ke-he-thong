@@ -6,7 +6,7 @@ redirect cache. The reference service for the observability build.
 ## Run
 
 ```bash
-podman compose -f apps/url-shortener-node/compose.yaml start   # mongo + redis
+podman compose up -d mongo redis      # from the repo root
 npm run dev              # no telemetry
 npm run dev:otel         # watch mode, traces at 100%
 npm run load:otel        # NO watch, 10% sampling — use for load tests

@@ -12,7 +12,7 @@ app ──OTLP:7318──► Collector ──► Tempo ──┐
 ## Run
 
 ```bash
-podman compose -f infra/observability/compose.yaml start   # or `up -d` first time
+podman compose up -d                  # from the repo root; all services live in one file
 ```
 
 Grafana **7080** · Prometheus **7090** · Tempo **7200** · OTLP **7318**/7317 ·

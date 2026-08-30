@@ -4,12 +4,13 @@
   "description": "Week 1+ practice project: modular monolith for system design study",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "NODE_OPTIONS=\"--max-old-space-size=${NODE_MAX_HEAP_MB:-100}\" tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "NODE_OPTIONS=\"--max-old-space-size=${NODE_MAX_HEAP_MB:-100}\" node dist/index.js",
     "typecheck": "tsc --noEmit",
     "migrate": "tsx scripts/migrate.ts",
-    "test": "node --test --import tsx test/"
+    "test:prepare": "tsx scripts/create-test-db.ts && tsx scripts/migrate.ts",
+    "test": "DATABASE_URL=postgres://app:app@localhost:5432/deliveroo_test LOG_LEVEL=silent sh -c 'npm run test:prepare && node --test --test-concurrency=1 --import tsx --import ./test/setup.ts test/*.test.ts'"
   },
   "dependencies": {
     "fastify": "^5.2.0",

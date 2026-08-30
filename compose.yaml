@@ -1,0 +1,114 @@
+# Single compose file for the whole monorepo.
+#
+#   podman compose up -d                    # everything
+#   podman compose up -d mongo redis        # just what one app needs
+#
+# NOTE: the Node services are NOT here. They run on the host
+# (npm run dev:otel / load:otel) so OTLP goes to localhost and hot reload works.
+# Only datastores and telemetry backends are containerised.
+#
+# Resource limits apply at CREATE time only. After changing them you must
+# `up -d` (recreate) — `start` silently reuses the old, uncapped container.
+
+name: sd
+
+services:
+  # ---------------- datastores ----------------
+  postgres:                                    # deliveroo-node
+    image: docker.io/library/postgres:17-alpine
+    container_name: deliveroo-postgres
+    mem_limit: ${MEM_POSTGRES:-100m}
+    cpus: ${CPU_POSTGRES:-1.0}
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: deliveroo
+    ports: ["${PORT_POSTGRES:-5432}:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d deliveroo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mongo:                                       # url-shortener-node
+    image: docker.io/library/mongo:7
+    # 100m OOM-kills this under the test suite. WiredTiger sizes its cache from
+    # HOST RAM and ignores the container limit, so the cache must be capped
+    # explicitly as well -- raising mem_limit alone just moves the cliff.
+    mem_limit: ${MEM_MONGO:-512m}
+    cpus: ${CPU_MONGO:-1.5}
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
+    ports: ["27017:27017"]
+    volumes: ["mongodata:/data/db"]
+
+  redis:                                       # url-shortener-node cache
+    image: docker.io/library/redis:7
+    mem_limit: ${MEM_REDIS:-100m}
+    cpus: ${CPU_REDIS:-1.0}
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    ports: ["6379:6379"]
+
+  # ---------------- telemetry ----------------
+  otel-collector:
+    image: docker.io/otel/opentelemetry-collector-contrib:0.121.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    mem_limit: ${MEM_COLLECTOR:-100m}
+    cpus: ${CPU_COLLECTOR:-1.5}
+    volumes:
+      - ./infra/observability/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "${OBS_OTLP_GRPC_PORT:-7317}:4317"
+      - "${OBS_OTLP_HTTP_PORT:-7318}:4318"
+      - "${OBS_COLLECTOR_METRICS_PORT:-7889}:8889"
+      - "${OBS_COLLECTOR_HEALTH_PORT:-7133}:13133"
+
+  prometheus:
+    image: docker.io/prom/prometheus:v3.2.1
+    mem_limit: ${MEM_PROMETHEUS:-100m}
+    cpus: ${CPU_PROMETHEUS:-1.0}
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=${PROM_RETENTION:-6h}"
+      - "--enable-feature=exemplar-storage"
+      - "--web.enable-remote-write-receiver"
+    volumes:
+      - ./infra/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/observability/prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+      - prometheus-data:/prometheus
+    ports: ["${OBS_PROMETHEUS_PORT:-7090}:9090"]
+    depends_on: [otel-collector]
+
+  tempo:
+    image: docker.io/grafana/tempo:2.7.1
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    user: "0:0"
+    mem_limit: ${MEM_TEMPO:-100m}
+    cpus: ${CPU_TEMPO:-1.0}
+    volumes:
+      - ./infra/observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports: ["${OBS_TEMPO_PORT:-7200}:3200"]
+
+  grafana:
+    image: docker.io/grafana/grafana:11.5.2
+    mem_limit: ${MEM_GRAFANA:-100m}
+    cpus: ${CPU_GRAFANA:-0.5}
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports: ["${OBS_GRAFANA_PORT:-7080}:3000"]
+    depends_on: [prometheus, tempo]
+
+volumes:
+  pgdata:
+  mongodata:
+  prometheus-data:
+  tempo-data:
+  grafana-data:

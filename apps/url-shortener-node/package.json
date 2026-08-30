@@ -4,14 +4,14 @@
   "description": "URL shortener service \u2014 DDIA ch.1 scalability/maintainability practice",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "dev:otel": "OTEL_ENABLED=1 OTEL_SERVICE_NAME=url-shortener OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:7318 tsx watch --import ./src/otel.ts src/index.ts",
+    "dev": "NODE_OPTIONS=\"--max-old-space-size=${NODE_MAX_HEAP_MB:-100}\" tsx watch src/index.ts",
+    "dev:otel": "NODE_OPTIONS=\"--max-old-space-size=${NODE_MAX_HEAP_MB:-100}\" OTEL_ENABLED=1 OTEL_SERVICE_NAME=url-shortener OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:7318 tsx watch --import ./src/otel.ts src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "start:otel": "OTEL_ENABLED=1 OTEL_SERVICE_NAME=url-shortener OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:7318 node --import ./dist/otel.js dist/index.js",
+    "start": "NODE_OPTIONS=\"--max-old-space-size=${NODE_MAX_HEAP_MB:-100}\" node dist/index.js",
+    "start:otel": "NODE_OPTIONS=\"--max-old-space-size=${NODE_MAX_HEAP_MB:-100}\" OTEL_ENABLED=1 OTEL_SERVICE_NAME=url-shortener OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:7318 node --import ./dist/otel.js dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "MONGO_URL=mongodb://localhost:27017/shorturl_test REDIS_URL=redis://localhost:6379/1 node --experimental-test-module-mocks --test --test-concurrency=1 --import tsx --import ./test/setup.ts test/*.test.ts",
-    "load:otel": "OTEL_ENABLED=1 OTEL_SERVICE_NAME=url-shortener OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:7318 OTEL_TRACES_SAMPLER=parentbased_traceidratio OTEL_TRACES_SAMPLER_ARG=${OTEL_TRACES_SAMPLER_ARG:-0.1} tsx --import ./src/otel.ts src/index.ts"
+    "load:otel": "NODE_OPTIONS=\"--max-old-space-size=${NODE_MAX_HEAP_MB:-100}\" OTEL_ENABLED=1 OTEL_SERVICE_NAME=url-shortener OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:7318 OTEL_TRACES_SAMPLER=parentbased_traceidratio OTEL_TRACES_SAMPLER_ARG=${OTEL_TRACES_SAMPLER_ARG:-0.1} tsx --import ./src/otel.ts src/index.ts"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
