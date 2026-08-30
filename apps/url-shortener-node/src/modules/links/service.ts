@@ -25,7 +25,15 @@ export async function shorten(longUrl: string, opts: ShortenOpts = {}): Promise<
     metadata: opts.metadata ?? null, click_count: 0, created_at: now, expires_at: expires,
   };
   await insertLink(doc);
-  await cacheSet(code, longUrl, config.cacheTtlS);
+  // The link is already durable in Mongo; warming the cache is best-effort.
+  // Unguarded, a dead cache turned every write into a 500 even though the write
+  // itself had succeeded -- the read path was defended and this one was not.
+  // Found by the 2026-08-30 game-day.
+  try {
+    await cacheSet(code, longUrl, config.cacheTtlS);
+  } catch (err) {
+    console.warn(`[shorten] cacheSet failed for ${code}, continuing:`, err);
+  }
   return { code };
 }
 

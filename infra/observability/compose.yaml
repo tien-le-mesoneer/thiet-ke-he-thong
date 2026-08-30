@@ -55,7 +55,10 @@ services:
     image: docker.io/grafana/tempo:2.7.1
     command: ["-config.file=/etc/tempo/tempo.yaml"]
     user: "0:0"
-    mem_limit: ${MEM_TEMPO:-256m}
+    # OOM-killed (exit 137) at 256m once traces actually flowed: the
+    # metrics_generator and the ingester's in-memory blocks both grow with
+    # ingest rate, and idle usage says nothing about either.
+    mem_limit: ${MEM_TEMPO:-512m}
     cpus: ${CPU_TEMPO:-1.0}
     volumes:
       - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
