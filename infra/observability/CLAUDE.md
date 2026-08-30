@@ -12,7 +12,8 @@ app ──OTLP:7318──► Collector ──► Tempo ──┐
 ## Run
 
 ```bash
-podman compose up -d                  # from the repo root; all services live in one file
+podman network create sd-net          # once; apps join this to reach the Collector
+podman compose -f infra/observability/compose.yaml up -d
 ```
 
 Grafana **7080** · Prometheus **7090** · Tempo **7200** · OTLP **7318**/7317 ·

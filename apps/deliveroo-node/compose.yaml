@@ -1,0 +1,57 @@
+# deliveroo-node — app + Postgres.
+#
+#   podman network create sd-net        # once, shared with infra/observability
+#   podman compose -f apps/deliveroo-node/compose.yaml up -d
+#
+# Not instrumented yet (see CLAUDE.md); it joins sd-net so it can reach the
+# Collector once it is.
+
+name: deliveroo
+
+services:
+  app:
+    build:
+      context: .
+      target: dev
+    mem_limit: ${MEM_APP:-256m}
+    cpus: ${CPU_APP:-2.0}
+    command: ["npm", "run", "container"]
+    environment:
+      NODE_MAX_HEAP_MB: ${NODE_MAX_HEAP_MB:-100}
+      PORT: "3000"
+      DATABASE_URL: postgres://app:app@postgres:5432/deliveroo
+    ports: ["${PORT_APP:-3000}:3000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [sd-net]
+
+  postgres:
+    image: docker.io/library/postgres:17-alpine
+    container_name: deliveroo-postgres
+    # shared_buffers is Postgres's equivalent of the WiredTiger trap: it sizes
+    # from host RAM unless told otherwise.
+    mem_limit: ${MEM_POSTGRES:-384m}
+    cpus: ${CPU_POSTGRES:-1.0}
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=50"]
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: deliveroo
+    # 5433 on the host: a Homebrew PostgreSQL already owns 5432 on localhost and
+    # silently shadows this container, which is how a test run once pointed at
+    # the wrong database entirely.
+    ports: ["${PORT_POSTGRES:-5433}:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d deliveroo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+
+networks:
+  sd-net:
+    external: true

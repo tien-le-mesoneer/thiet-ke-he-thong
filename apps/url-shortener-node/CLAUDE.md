@@ -6,7 +6,10 @@ redirect cache. The reference service for the observability build.
 ## Run
 
 ```bash
-podman compose up -d mongo redis      # from the repo root
+podman network create sd-net                              # once, shared with observability
+podman compose -f apps/url-shortener-node/compose.yaml up -d   # app + mongo + redis, all capped
+
+# or run the app on the host against the containerised datastores:
 npm run dev              # no telemetry
 npm run dev:otel         # watch mode, traces at 100%
 npm run load:otel        # NO watch, 10% sampling — use for load tests
@@ -15,6 +18,27 @@ npm test                 # 26 tests
 
 ⚠️ **`tsx watch` does not propagate env to the server it re-spawns.** A sampler
 set on `dev:otel` is silently ignored. That is why `load:otel` exists.
+
+## Memory
+
+The app runs in a container so its memory is actually bounded — a host process
+gets no cgroup, so nothing enforces a limit on it. **Two ceilings, and you need
+both:**
+
+| | bounds | set by |
+|---|---|---|
+| `mem_limit: 256m` | RSS — kernel kills past it | compose |
+| `NODE_MAX_HEAP_MB: 100` | the V8 heap inside that | `NODE_OPTIONS` |
+
+RSS runs ~1.8x the heap (code, stacks, native buffers sit outside it), so a
+100 MB heap needs ~256m of room. Measured floors: **50 MB heap dies at startup**
+("Reached heap limit", 921 ms in), 75 MB works, 100 MB is the safe choice.
+Verified under load: 8,190 req/s, p99 9.89 ms, 155.8 MB of 256, no OOM.
+
+Mongo is capped at 512m **and** `--wiredTigerCacheSizeGB 0.25`, because
+WiredTiger sizes its cache from *host* RAM and cannot see the container limit.
+At 100m with no cache cap it looked fine at idle and was OOM-killed by the test
+suite.
 
 ## Design
 

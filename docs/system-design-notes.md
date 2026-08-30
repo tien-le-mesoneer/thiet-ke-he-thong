@@ -72,3 +72,49 @@ served. Dropped, timed-out and rejected requests never appear, so the metric
 generator like k6. In this repo the k6 numbers are the trustworthy ones, and the
 in-process histogram is trusted only because it is counted, not interpolated.
 
+## 2026-08-30 · Sizing memory: it does not scale with req/day
+_week 1 · node · source: ask · tags: capacity-estimation, right-sizing, littles-law, memory_
+
+**"How much memory for N req/day" is usually the wrong question.** Memory scales
+with **concurrency and working set**; **CPU** scales with request rate. Decompose
+before estimating:
+
+```
+memory = FIXED            (runtime, code, pools, live object set)
+       + PER-REQUEST x concurrency
+       + WORKING SET      (data kept hot)
+```
+
+**Worked example — url-shortener at 10,000 req/day.**
+`10,000 / 86,400 = 0.116 req/s` average; x10 peak factor = 1.16 req/s. Little's
+Law `L = λ × W` with the measured p99 of 7.02 ms gives
+`1.16 × 0.00702 = 0.008` requests in flight — under one at any instant. At ~30 KB
+per in-flight request that is **250 bytes**. The rate term is noise.
+
+Measured capacity of one process (100 MB heap / 180 MB RSS): 13,655 req/s =
+**1.18 billion req/day**, or 826M at 70% utilisation. 10,000/day uses 0.0008% of
+it — **118,000x headroom**.
+
+So the answer is the FIXED term: node ~180 MB + mongo ~236 MB + redis ~3 MB =
+**~420 MB, identical at 10k/day or 10M/day**. This is also why a 50 MB heap
+killed the app regardless of load: the ~49 MB live set exists before the first
+request arrives.
+
+**What actually grows is data, driven by WRITES not total requests.** At 10:1
+read:write that is 909 new links/day: 99.5 MB after 1 year, 298 MB after 3,
+498 MB after 5 — still smaller than the fixed overhead. Hot cache ~66k entries
+x 120 B = 8 MB.
+
+**When would rate start to matter?** To add 100 MB via concurrency you need
+`L = 3,413` in flight, i.e. `λ = 3413 / 0.00702 = 486,230 req/s` = 42 billion
+req/day. CPU dies thousands of times over first.
+
+**Corollary worth remembering:** `L = λ × W` means cutting latency also cuts
+memory. A 2-second endpoint needs 285x the concurrency of a 7 ms one at the same
+request rate — slow endpoints are expensive in RAM, not just in patience.
+
+**And measure under constraint, not at rest.** Uncapped, these services expand
+to fill what they are given (Grafana 296 MB uncapped -> 60 MB capped, same work).
+Observed usage tells you a process's appetite, not its requirement. See
+[[measuring-latency-without-fooling-yourself]].
+

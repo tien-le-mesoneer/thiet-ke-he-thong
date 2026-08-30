@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "migrate": "tsx scripts/migrate.ts",
     "test:prepare": "tsx scripts/create-test-db.ts && tsx scripts/migrate.ts",
-    "test": "DATABASE_URL=postgres://app:app@localhost:5432/deliveroo_test LOG_LEVEL=silent sh -c 'npm run test:prepare && node --test --test-concurrency=1 --import tsx --import ./test/setup.ts test/*.test.ts'"
+    "test": "DATABASE_URL=postgres://app:app@localhost:5432/deliveroo_test LOG_LEVEL=silent sh -c 'npm run test:prepare && node --test --test-concurrency=1 --import tsx --import ./test/setup.ts test/*.test.ts'",
+    "container": "NODE_OPTIONS=\"--max-old-space-size=${NODE_MAX_HEAP_MB:-100}\" tsx src/index.ts"
   },
   "dependencies": {
     "fastify": "^5.2.0",

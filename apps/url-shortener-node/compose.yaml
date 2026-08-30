@@ -1,0 +1,65 @@
+# url-shortener-node — app + its datastores.
+#
+#   podman network create sd-net        # once, shared with infra/observability
+#   podman compose -f apps/url-shortener-node/compose.yaml up -d
+#
+# The app runs in a container so its memory is actually bounded: a host process
+# gets no cgroup, so nothing enforces a limit on it. Two ceilings are needed and
+# they are different things —
+#   mem_limit                bounds RSS (kernel kills past it)
+#   NODE_MAX_HEAP_MB         bounds the V8 heap inside that
+# RSS runs roughly 1.8x the heap, so 100MB heap needs ~256m of headroom.
+# Measured: 50MB heap dies at startup, 75 works, 100 is the safe floor.
+
+name: url-shortener
+
+services:
+  app:
+    build:
+      context: .
+      target: dev
+    mem_limit: ${MEM_APP:-256m}
+    cpus: ${CPU_APP:-2.0}
+    # No `tsx watch` here on purpose: watch re-spawns the server as a child
+    # without passing through externally-set env, which silently drops the
+    # OTLP endpoint and sampler below. Hot reload stays a host-only workflow.
+    command: ["npm", "run", "container:otel"]
+    environment:
+      NODE_MAX_HEAP_MB: ${NODE_MAX_HEAP_MB:-100}
+      PORT: "3001"
+      MONGO_URL: mongodb://mongo:27017/shorturl
+      REDIS_URL: redis://redis:6379
+      OTEL_ENABLED: "1"
+      OTEL_SERVICE_NAME: url-shortener
+      # Container-to-container: the Collector's own port, not the 7xxx host map.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1}
+    ports: ["${PORT_APP:-3001}:3001"]
+    depends_on: [mongo, redis]
+    networks: [sd-net]
+
+  mongo:
+    image: docker.io/library/mongo:7
+    # WiredTiger sizes its cache from HOST RAM and cannot see mem_limit, so the
+    # cache must be capped explicitly too. At 100m with no cache cap this was
+    # OOM-killed by the test suite while looking fine at idle.
+    mem_limit: ${MEM_MONGO:-512m}
+    cpus: ${CPU_MONGO:-1.5}
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
+    ports: ["27017:27017"]
+    volumes: ["mongodata:/data/db"]
+
+  redis:
+    image: docker.io/library/redis:7
+    mem_limit: ${MEM_REDIS:-100m}
+    cpus: ${CPU_REDIS:-1.0}
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    ports: ["6379:6379"]
+
+volumes:
+  mongodata:
+
+networks:
+  sd-net:
+    external: true

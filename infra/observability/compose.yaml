@@ -1,0 +1,89 @@
+# Telemetry backends. Apps live in their own compose files and reach the
+# Collector over the shared `sd-net` network.
+#
+#   podman network create sd-net        # once
+#   podman compose -f infra/observability/compose.yaml up -d
+#
+# Host ports are on the 7xxx block (see .env) so nothing collides with the usual
+# 3000/9090/4317 defaults or macOS AirPlay. Container-internal ports keep their
+# upstream defaults, so every vendored config stays standard.
+#
+# Limits apply at CREATE time only — after changing them use `up -d`, not
+# `start`, or the old uncapped container is silently reused.
+
+name: sd-observability
+
+services:
+  otel-collector:
+    image: docker.io/otel/opentelemetry-collector-contrib:0.121.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    mem_limit: ${MEM_COLLECTOR:-256m}
+    cpus: ${CPU_COLLECTOR:-1.5}
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "${OBS_OTLP_GRPC_PORT:-7317}:4317"
+      - "${OBS_OTLP_HTTP_PORT:-7318}:4318"
+      - "${OBS_COLLECTOR_METRICS_PORT:-7889}:8889"
+      - "${OBS_COLLECTOR_HEALTH_PORT:-7133}:13133"
+    healthcheck:
+      test: ["CMD", "/otelcol-contrib", "--version"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [sd-net]
+
+  prometheus:
+    image: docker.io/prom/prometheus:v3.2.1
+    mem_limit: ${MEM_PROMETHEUS:-256m}
+    cpus: ${CPU_PROMETHEUS:-1.0}
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=${PROM_RETENTION:-6h}"
+      - "--enable-feature=exemplar-storage"
+      - "--web.enable-remote-write-receiver"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+      - prometheus-data:/prometheus
+    ports: ["${OBS_PROMETHEUS_PORT:-7090}:9090"]
+    depends_on: [otel-collector]
+    networks: [sd-net]
+
+  tempo:
+    image: docker.io/grafana/tempo:2.7.1
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    user: "0:0"
+    mem_limit: ${MEM_TEMPO:-256m}
+    cpus: ${CPU_TEMPO:-1.0}
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports: ["${OBS_TEMPO_PORT:-7200}:3200"]
+    networks: [sd-net]
+
+  grafana:
+    image: docker.io/grafana/grafana:11.5.2
+    mem_limit: ${MEM_GRAFANA:-192m}
+    cpus: ${CPU_GRAFANA:-0.5}
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports: ["${OBS_GRAFANA_PORT:-7080}:3000"]
+    depends_on: [prometheus, tempo]
+    networks: [sd-net]
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  tempo-data:
+
+networks:
+  sd-net:
+    external: true

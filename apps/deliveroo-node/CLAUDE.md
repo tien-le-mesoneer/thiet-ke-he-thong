@@ -8,8 +8,9 @@ driver; migrations are plain SQL files in `migrations/`, applied by
 ## Run
 
 ```bash
-podman compose up -d postgres         # from the repo root
-npm run migrate
+podman network create sd-net                          # once
+podman compose -f apps/deliveroo-node/compose.yaml up -d   # app + postgres
+npm run migrate                                      # host-side, against localhost:5433
 npm run dev
 npm test   # runs against deliveroo_test, never the dev database
 ```
@@ -24,3 +25,9 @@ driven by `/learn-sd`.
 
 Not yet instrumented. The observability spec plans an OTel preload here once the
 saga chain exists — until then there is no distributed trace worth collecting.
+
+## Ports
+
+Postgres is published on **5433**, not 5432. A Homebrew PostgreSQL already owns
+5432 on localhost and silently shadows the container — a test run once pointed
+at the wrong database entirely because of it.
