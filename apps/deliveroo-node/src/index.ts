@@ -4,6 +4,7 @@ import { pool } from "./db.js";
 import { usersRoutes } from "./modules/users/routes.js";
 import { catalogRoutes } from "./modules/catalog/routes.js";
 import { ordersRoutes } from "./modules/orders/routes.js";
+import { paymentsRoutes } from "./modules/payments/routes.js";
 
 const app = Fastify({
   logger: { level: config.logLevel }, // structured JSON logs from day one
@@ -21,5 +22,6 @@ app.get("/health", async () => {
 await app.register(usersRoutes, { prefix: "/users" });
 await app.register(catalogRoutes, { prefix: "/catalog" });
 await app.register(ordersRoutes, { prefix: "/orders" });
+await app.register(paymentsRoutes, { prefix: "/payments" });
 
 await app.listen({ port: config.port, host: "0.0.0.0" });
