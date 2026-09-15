@@ -4,9 +4,19 @@ dist/
 # ...but the observability port map is config, not secrets, and the stack
 # does not reproduce without it.
 !infra/observability/.env
+# Same reasoning for the broker spike: these are the ADR's measured caps.
+!infra/broker-spike/.env
 *.log
 .codegraph/
 graphify-out/
 .claude/.cc-writes/
 .superpowers/
 .DS_Store
+
+# Drop-in scrape targets belong to whichever temporary stack is running and are
+# removed when it stops. Committing one leaves a permanently-DOWN Prometheus
+# target in a fresh clone; the source of truth lives with the stack that owns it
+# (e.g. infra/broker-spike/prometheus-brokers.yml). The directory itself must
+# exist for the compose mount, hence the .gitkeep exception.
+infra/observability/prometheus/scrape/*
+!infra/observability/prometheus/scrape/.gitkeep

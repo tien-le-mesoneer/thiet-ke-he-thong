@@ -1,0 +1,129 @@
+# Kafka vs RabbitMQ spike — the Week 7 broker decision, measured rather than
+# guessed. Throwaway: there is no volume on either service, so `down` really
+# does reset them and every run starts from an empty log.
+#
+#   podman network create sd-net        # once, shared with the other areas
+#   podman compose -f infra/broker-spike/compose.yaml up -d
+#   node infra/broker-spike/bench.mjs kafka
+#   node infra/broker-spike/bench.mjs rabbit
+#   podman compose -f infra/broker-spike/compose.yaml down
+#
+# Host ports follow the repo convention: 7 + the upstream default's last three
+# digits (9092 -> 7092, 5672 -> 7672). RabbitMQ's management UI is the one
+# exception — 15672 would collide with AMQP's 7672, so it gets 7673.
+#
+# Limits apply at CREATE time only — after changing them use `up -d`, not
+# `start`, or the old uncapped container is silently reused. (Learned the hard
+# way during the 2026-08-30 game-day.)
+
+name: sd-broker-spike
+
+services:
+  kafka:
+    image: docker.io/apache/kafka:3.9.0
+    mem_limit: ${MEM_KAFKA:-1g}
+    cpus: ${CPU_KAFKA:-2.0}
+    environment:
+      # Single-node KRaft: this process is both the broker and the controller,
+      # so there is no ZooKeeper. That removes a whole JVM from the comparison
+      # and is how Kafka is deployed from 3.3 on.
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      # Two listeners on purpose: containers reach it as kafka:9092, the bench
+      # on the host reaches it as localhost:7092. A single advertised listener
+      # can serve one or the other, never both.
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:${BROKER_KAFKA_PORT:-7092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # The JVM sizes its heap from *host* RAM unless told otherwise — the same
+      # trap WiredTiger fell into at 100m. mem_limit alone would not bound this.
+      KAFKA_HEAP_OPTS: -Xmx${KAFKA_HEAP:-512m} -Xms${KAFKA_HEAP:-512m}
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    ports:
+      - "${BROKER_KAFKA_PORT:-7092}:9094"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+    networks: [sd-net]
+
+  rabbitmq:
+    image: docker.io/library/rabbitmq:4.0-management
+    mem_limit: ${MEM_RABBIT:-1g}
+    cpus: ${CPU_RABBIT:-2.0}
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER:-spike}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASS:-spike}
+    volumes:
+      # Memory watermark lives here, not in the environment — see the file.
+      # NOTE: no enabled_plugins mount. rabbitmq_prometheus is ALREADY enabled
+      # in the -management image (verified: `rabbitmq-plugins list -e` shows
+      # management + prometheus + 2 implicit). Mounting one was redundant.
+      - ./rabbitmq.conf:/etc/rabbitmq/conf.d/10-spike.conf:ro
+      # Mount the DATA dir, not /var/lib/rabbitmq itself. Podman seeds an empty
+      # named volume from the image preserving ownership, so mounting the parent
+      # drags in .erlang.cookie as root:root 0400 -- and the entrypoint drops to
+      # uid 999 before starting Erlang, which then cannot read it (eacces,
+      # exit 1). `:U` chowns the volume but NOT that seeded file. Mounting one
+      # level down keeps the cookie on the container layer where the entrypoint
+      # manages it, and persists the only thing that matters: mnesia.
+      - rabbitmq-data:/var/lib/rabbitmq/mnesia:U
+    ports:
+      - "${BROKER_RABBIT_PORT:-7672}:5672"
+      - "${BROKER_RABBIT_MGMT_PORT:-7673}:15672"
+      - "${BROKER_RABBIT_METRICS_PORT:-7692}:15692"
+    healthcheck:
+      # `gosu rabbitmq` is LOAD-BEARING, not tidiness. rabbitmq-diagnostics
+      # creates /var/lib/rabbitmq/.erlang.cookie if it is missing. Run as root
+      # (the container's default user) it wins the race against the server's
+      # own startup and writes the cookie root:root 0400 — and the server, which
+      # drops to uid 999, then cannot read its own cookie: eacces, exit 1, on
+      # every single boot. Bisected: the container starts fine with the volume,
+      # the config mount, the env and the limits; adding this healthcheck
+      # WITHOUT gosu is what breaks it, and start_period does not help.
+      test: ["CMD", "gosu", "rabbitmq", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+    networks: [sd-net]
+
+  # Kafka has no /metrics of its own. This sidecar connects as a Kafka client
+  # and exposes consumer-group lag + topic offsets — the metric that actually
+  # matters for an outbox relay, since lag IS "are events flowing".
+  #
+  # That it needs a separate container at all is a finding, not an accident:
+  # RabbitMQ answers the same question from its own process.
+  kafka-exporter:
+    image: docker.io/danielqsj/kafka-exporter:v1.7.0
+    command: ["--kafka.server=kafka:9092", "--kafka.version=3.9.0"]
+    mem_limit: ${MEM_KAFKA_EXPORTER:-64m}
+    cpus: ${CPU_KAFKA_EXPORTER:-0.5}
+    ports:
+      - "${BROKER_KAFKA_METRICS_PORT:-7308}:9308"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks: [sd-net]
+
+# Both brokers get a named volume, not just RabbitMQ. It is the fix for
+# rootless podman's `.erlang.cookie: eacces` on the Rabbit side, but giving
+# Kafka one too is a FAIRNESS requirement: a volume and the container's
+# overlayfs writable layer are different storage paths with different write
+# costs, and this benchmark is measuring durable writes.
+volumes:
+  kafka-data:
+  rabbitmq-data:
+
+networks:
+  sd-net:
+    external: true

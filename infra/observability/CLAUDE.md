@@ -34,6 +34,11 @@ health **7133** · app-metrics **7889**. All ports in `.env`.
   recompute.
 - **After a restart, `sum()` on a counter double-counts** for ~5 min — Prometheus
   keeps the dead instance's series. Use `increase(...[5m])`.
+- **Temporary stacks add scrape targets by dropping a file into
+  `prometheus/scrape/`**, not by editing `prometheus.yml` — and remove it when
+  they come down, or Prometheus keeps a permanently-DOWN job. The dropped-in
+  file must be a **mapping with a `scrape_configs:` key**; a bare list exits 2
+  with `cannot unmarshal !!seq into config.ScrapeConfigs`.
 - **Tempo needs 30–60s to become `/ready`.** Slower than everything else; not a
   fault.
 

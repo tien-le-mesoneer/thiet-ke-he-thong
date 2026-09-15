@@ -8,6 +8,7 @@ own `CLAUDE.md` — read that one before working there.
 | `apps/url-shortener-node/` | Fastify URL shortener. Reference service for the observability build. |
 | `apps/deliveroo-node/` | Food-delivery service, the long-arc Phase 2–3 build. Earlier along. |
 | `infra/observability/` | OTel Collector + Prometheus + Tempo + Grafana. Ports on the 7xxx block. |
+| `infra/broker-spike/` | **Throwaway.** Kafka vs RabbitMQ benchmark for the Week 7 broker ADR. Delete once the decision lands. |
 | `docs/` | Study plan, progress log, acceptance criteria, design specs, notes. |
 | `.claude/skills/` | `learn-sd` (study driver) and `graphify`. |
 

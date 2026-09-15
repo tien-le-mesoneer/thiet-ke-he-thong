@@ -1,0 +1,277 @@
+{
+  "uid": "broker-spike",
+  "title": "Broker Spike — Kafka vs RabbitMQ",
+  "tags": [
+    "spike",
+    "broker",
+    "adr"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "type": "text",
+      "title": "What this dashboard is for",
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Evidence for **docs/superpowers/specs/2026-09-14-broker-kafka-vs-rabbitmq.md**. Targets only exist while `infra/broker-spike/compose.yaml` is up and `prometheus-brokers.yml` is in `infra/observability/prometheus/scrape/`.\n\nThe asymmetry is the point: **RabbitMQ's panels come from the broker itself** (`rabbitmq_prometheus`, enabled by default, 231 broker metrics). **Kafka's come from a `kafka-exporter` sidecar** that exposes 16 — broker internals (heap, GC, request queues) would need a second mechanism, the JMX exporter."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Backlog — the 'are events flowing' signal",
+      "description": "RabbitMQ reports queue depth directly. Kafka's lag is derived by the sidecar, and MUST be filtered with `> 0`: kafka_consumergroup_lag returns -1 for partitions with no committed offset, so a bare sum() under-reports by 1 per idle partition.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rabbitmq_queue_messages_ready)",
+          "legendFormat": "rabbitmq — messages ready",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum(kafka_consumergroup_lag > 0)",
+          "legendFormat": "kafka — consumer lag (filtered)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "sum(kafka_consumergroup_lag)",
+          "legendFormat": "kafka — bare sum() (WRONG, shown to prove it)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Broker memory",
+      "description": "RabbitMQ self-reports RSS. Kafka has no equivalent here — the sidecar cannot see inside the JVM, which is exactly why the ADR budgets Kafka from `podman stats` instead.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rabbitmq_process_resident_memory_bytes",
+          "legendFormat": "rabbitmq RSS (self-reported)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "RabbitMQ — publish vs acknowledge rate",
+      "description": "Publishes climbing while acks stay flat is a stalled consumer. This pair is free with the built-in plugin.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(rabbitmq_global_messages_received_total[1m])",
+          "legendFormat": "received/s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "rate(rabbitmq_global_messages_acknowledged_total[1m])",
+          "legendFormat": "acknowledged/s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka — write rate per partition",
+      "description": "Derived from the topic's end offset moving. Uneven lines across partitions mean the partition key is skewed — the thing that actually breaks per-key ordering at scale.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(kafka_topic_partition_current_offset{topic!~\"__.*\"}[1m])",
+          "legendFormat": "{{topic}} p{{partition}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Metrics the broker gives you about ITSELF",
+      "description": "Counted from the scrape, not from documentation. Two-thirds of Kafka's endpoint is the exporter's own Go runtime.",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(count by (__name__)({job=\"rabbitmq\"}))",
+          "legendFormat": "rabbitmq",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "count(count by (__name__)({job=\"kafka\"}))",
+          "legendFormat": "kafka (via sidecar)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Scrape health — both targets",
+      "description": "If a line drops to 0 the spike stack is down; remove prometheus-brokers.yml from the scrape dir rather than leaving a dead target.",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "max": 1,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=~\"kafka|rabbitmq\"}",
+          "legendFormat": "{{job}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    }
+  ],
+  "version": 1
+}

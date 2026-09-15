@@ -6,6 +6,12 @@ global:
 rule_files:
   - /etc/prometheus/rules.yml
 
+# Drop-in scrape jobs. Anything in this directory is picked up without editing
+# the file above, so a temporary stack (the broker spike) can add targets and
+# then remove them without leaving permanently-DOWN jobs behind.
+scrape_config_files:
+  - /etc/prometheus/scrape/*.yml
+
 scrape_configs:
   # App metrics, forwarded by the Collector's prometheus exporter.
   - job_name: otel-collector-apps
