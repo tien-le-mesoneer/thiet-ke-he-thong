@@ -130,7 +130,7 @@ thing it measures is not.
 
 | # | Criterion | Winner | Why |
 |---|---|---|---|
-| 1 | Delivery guarantees | Kafka (slight) | Both do at-least-once with acks/confirms. Kafka adds transactions/EOS *within Kafka*; with an outbox + idempotent consumer we do not use it. |
+| 1 | Delivery guarantees | **neither — criterion removed** | Both do at-least-once with acks/confirms. Kafka adds transactions/EOS *within Kafka*, but the outbox plus a consumer-side dedupe table (below) already delivers effectively-once, so the feature is unreachable. A criterion both options satisfy is not a criterion. |
 | 2 | Retry / DLQ | **RabbitMQ** | Native dead-letter exchange, declarative, per-queue. Kafka has no DLQ — you build retry topics and a DLQ topic in consumer code. |
 | 3 | Throughput | Kafka | 1.5–3× on batched publish. Both are ≥25,000× the requirement. |
 | 4 | Persistence / replay | **Kafka** | The log retains after consumption. RabbitMQ deletes on ack. Replay is a capability, not a tuning knob. |
@@ -142,6 +142,25 @@ thing it measures is not.
 
 Three clear wins each way. This is genuinely split, and the split is not between
 two answers to one question — it is between two *different questions*.
+
+## What the delivery-guarantee interview settled (2026-09-16)
+
+Three decisions taken after the measurements, each of which removes a criterion
+rather than scoring it:
+
+1. **Ordering is not required.** A version guard on the consumer — the same
+   compare-and-set shape as `transitionOrder` — makes out-of-order delivery
+   harmless. This deletes partitions, message groups and FIFO queues from the
+   comparison entirely.
+2. **Consumers dedupe on the producer's `outbox.id`**, inserted into a
+   `consumed_events` table in the *same transaction* as the side effect. Never
+   on a broker-assigned id: those are per-delivery, not per-message, so they
+   dedupe nothing. This is what removes criterion 1.
+3. **Redis Streams / Valkey dropped.** Not on licensing — Valkey is BSD-3 and
+   the relicensing concern is answerable. Dropped because Redis is already load
+   bearing as the URL shortener's redirect cache, and putting the event
+   backbone in the same process means one eviction policy mistake takes out
+   both. Separate failure domains for cache and queue.
 
 ## Decision
 
@@ -181,6 +200,10 @@ wrong even though it reaches the same decision.
   lag is the outbox's "are events flowing" SLI.
 - Alert on `sum(kafka_consumergroup_lag > 0)`, never bare `sum(...)`.
 - DLQ and retry topics are application code we must write (Week 12).
+- `consumed_events` must be pruned on a window **longer than the broker's
+  maximum redelivery delay**, not on table size. For Kafka that is
+  `retention.ms` plus any manual replay window; prune shorter and a message
+  redriven from a DLQ after the window is reprocessed as new.
 - The outbox lag metric (`max(now() - created_at) WHERE published_at IS NULL`)
   stays the primary signal regardless of broker — it lives in Postgres and keeps
   working when the broker is the thing that died. The 2026-08-30 game-day proved
