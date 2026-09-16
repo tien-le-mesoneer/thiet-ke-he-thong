@@ -25,7 +25,15 @@ export async function shorten(longUrl: string, opts: ShortenOpts = {}): Promise<
     metadata: opts.metadata ?? null, click_count: 0, created_at: now, expires_at: expires,
   };
   await insertLink(doc);
-  await cacheSet(code, longUrl, config.cacheTtlS);
+  // The link is already durable in Mongo; warming the cache is best-effort.
+  // Unguarded, a dead cache turned every write into a 500 even though the write
+  // itself had succeeded -- the read path was defended and this one was not.
+  // Found by the 2026-08-30 game-day.
+  try {
+    await cacheSet(code, longUrl, config.cacheTtlS);
+  } catch (err) {
+    console.warn(`[shorten] cacheSet failed for ${code}, continuing:`, err);
+  }
   return { code };
 }
 
@@ -38,11 +46,11 @@ export async function resolve(code: string): Promise<string | null> {
     console.warn(`[resolve] cacheGet failed for ${code}, falling back to Mongo:`, err);
   }
   if (cached) {
-    cacheHits.inc();
+    cacheHits.add(1);
     try { await incrClick(code); } catch (err) { console.warn(`[resolve] incrClick failed for ${code}:`, err); }
     return cached;                                         // cache hit
   }
-  cacheMisses.inc();
+  cacheMisses.add(1);
   const doc = await findByCode(code);                     // cache miss (normal or Redis-down fallback)
   if (!doc) return null;
   try { await cacheSet(code, doc.long_url, config.cacheTtlS); }

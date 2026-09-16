@@ -1,0 +1,27 @@
+# Broker spike scrape targets. Copy into the observability stack while the
+# spike is up, delete when it comes down:
+#
+#   cp infra/broker-spike/prometheus-brokers.yml infra/observability/prometheus/scrape/
+#   rm infra/observability/prometheus/scrape/prometheus-brokers.yml
+#
+# Both stacks share sd-net, so Prometheus resolves these by container name.
+#
+# NOTE: a file loaded via `scrape_config_files` must still be a MAPPING with a
+# `scrape_configs:` key — a bare list of jobs is rejected with
+# "cannot unmarshal !!seq into config.ScrapeConfigs" and Prometheus exits 2.
+scrape_configs:
+  # RabbitMQ ships its own Prometheus endpoint (rabbitmq_prometheus plugin,
+  # ENABLED BY DEFAULT in the -management image — verified with
+  # `rabbitmq-plugins list -e`). No sidecar, no exporter to operate, and it
+  # covers queue depth, message rates, memory, connections and file descriptors.
+  - job_name: rabbitmq
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+
+  # Kafka has no native Prometheus endpoint. This sidecar speaks the Kafka
+  # protocol and derives consumer-group lag and topic offsets; broker internals
+  # (JVM heap, GC, request queues) would need a SECOND mechanism, the JMX
+  # exporter attached as a -javaagent.
+  - job_name: kafka
+    static_configs:
+      - targets: ["kafka-exporter:9308"]

@@ -1,0 +1,14 @@
+{
+  "name": "broker-spike",
+  "private": true,
+  "type": "module",
+  "description": "Throwaway benchmark for the Week 7 Kafka-vs-RabbitMQ ADR.",
+  "scripts": {
+    "bench:kafka": "node bench.mjs kafka",
+    "bench:rabbit": "node bench.mjs rabbit"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.5",
+    "kafkajs": "^2.2.4"
+  }
+}

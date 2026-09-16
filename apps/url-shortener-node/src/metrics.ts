@@ -1,15 +1,23 @@
-import { Registry, Histogram, Counter, collectDefaultMetrics } from "prom-client";
+import { metrics } from "@opentelemetry/api";
 
-export const registry = new Registry();
-collectDefaultMetrics({ register: registry });
+// Bound to whichever MeterProvider is global when this module first loads.
+// With OTEL_ENABLED unset no provider is registered, so every instrument below
+// is a no-op — that is the intended zero-overhead default, not a failure.
+const meter = metrics.getMeter("url-shortener");
 
-export const httpLatency = new Histogram({
-  name: "http_request_duration_seconds",
-  help: "HTTP request latency",
-  labelNames: ["method", "route", "status"] as const,
-  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1], // p99-friendly
-  registers: [registry],
+export const httpLatency = meter.createHistogram("http_request_duration_seconds", {
+  description: "HTTP request latency",
+  unit: "s",
 });
-export const cacheHits = new Counter({ name: "cache_hits_total", help: "redirect cache hits", registers: [registry] });
-export const cacheMisses = new Counter({ name: "cache_misses_total", help: "redirect cache misses", registers: [registry] });
-export const idBlocks = new Counter({ name: "id_blocks_total", help: "id blocks allocated", registers: [registry] });
+
+export const cacheHits = meter.createCounter("cache_hits_total", {
+  description: "redirect cache hits",
+});
+
+export const cacheMisses = meter.createCounter("cache_misses_total", {
+  description: "redirect cache misses",
+});
+
+export const idBlocks = meter.createCounter("id_blocks_total", {
+  description: "id blocks allocated",
+});

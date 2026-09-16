@@ -1,4 +1,4 @@
-import type { Queryable } from "../../db.js";
+import { pool, type Queryable } from "../../db.js";
 
 interface PaymentResult {
   id: string;
@@ -21,4 +21,16 @@ export async function chargePayment(
     [orderId, amountCents, status],
   );
   return rows[0] as PaymentResult;
+}
+
+/** Payment attempts for one order, oldest first — retries show up as extra rows. */
+export async function listPaymentsForOrder(orderId: string): Promise<unknown[]> {
+  const { rows } = await pool.query(
+    `SELECT id, order_id, amount_cents, status, created_at
+       FROM payments.payments
+      WHERE order_id = $1
+      ORDER BY created_at`,
+    [orderId],
+  );
+  return rows;
 }

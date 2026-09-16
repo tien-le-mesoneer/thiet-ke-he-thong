@@ -1,7 +1,7 @@
 # Application-Wide Observability (OpenTelemetry-first) — Design Spec
 
 **Date:** 2026-07-17
-**Status:** Approved design, pending implementation plan
+**Status:** Approved design, open decisions resolved 2026-08-24, pending implementation plan
 **Scope:** Monorepo-wide — `apps/deliveroo-node`, `apps/url-shortener-node`, a new shared `packages/observability-node`, and a new `infra/observability/` stack.
 
 ## Purpose
@@ -72,6 +72,7 @@ packages/observability-node/
 apps/deliveroo-node/                          # add otel preload + custom metrics; depend on @sd/observability-node
 apps/url-shortener-node/                      # migrate tracing.ts → shared bootstrap; port cache/id counters to OTel
 infra/observability/
+  .env                                        # host port map (7xxx block)
   compose.yaml                                # otel-collector, prometheus, tempo, grafana
   otel-collector-config.yaml                  # OTLP receivers + postgresql/mongodb/redis receivers; export to prometheus+tempo
   prometheus/prometheus.yml                   # scrape the Collector; load rules
@@ -87,7 +88,7 @@ infra/observability/
 
 ### 1. `packages/observability-node` — shared OTel bootstrap
 - One responsibility: configure OTel once for any Node service.
-- Reads `OTEL_SERVICE_NAME` and `OTEL_EXPORTER_OTLP_ENDPOINT` (default `http://localhost:4318`) from env.
+- Reads `OTEL_SERVICE_NAME` and `OTEL_EXPORTER_OTLP_ENDPOINT` from env. The stack publishes OTLP on the host at **7318** (HTTP) / **7317** (gRPC) — see `infra/observability/.env` for the full 7xxx port map — so the apps set the endpoint explicitly rather than relying on the SDK's `localhost:4318` default.
 - Starts `NodeSDK` with `getNodeAutoInstrumentations()` (HTTP/Fastify, `pg`, `mongodb`, `ioredis`) → traces + HTTP server RED metrics with no per-route code.
 - Injects `trace_id`/`span_id` into pino logs (`@opentelemetry/instrumentation-pino` or a manual log hook).
 - Guarded: a no-op unless `OTEL_ENABLED=1`, so tests/dev stay quiet (reuses the pattern already proven in url-shortener's `tracing.ts`).
@@ -106,8 +107,18 @@ infra/observability/
 - **Grafana:** provisioned Prometheus + Tempo datasources; provisioned dashboards; exemplars enabled so p99 panels link to traces.
 
 ### 4. SLO + burn-rate alert
-- Define **one SLO**: url-shortener redirect availability (non-5xx) ≥ 99.9% over 30 days (or p99 < 50 ms — pick availability as the SLI).
+- Define **one SLO** (decided 2026-08-24): url-shortener redirect **latency** — 99% of redirects served in < 50 ms over 30 days. The SLI is a latency percentile, not availability, so the pipeline exercises histogram buckets and tail behaviour end-to-end.
+  - Baseline: k6 measured p99 = 18.06 ms at low load, but a 2026-08-24 ramp to 200 VUs (980k requests, 8,166 req/s) measured **p99 = 41.65 ms — 83% of the 50 ms budget**. The target is real but the headroom is thin at peak, so the burn-rate alert in slice 4 will actually have something to fire on. Distribution from that run: mean 11.4 ms, p50 9.92 ms, p90 21.04 ms, p95 25.94 ms, p99 41.65 ms, max 145.19 ms — the mean sits next to the median and says nothing about the tail, which is the whole argument for percentile SLIs.
+  - **Latency SLIs are counted, not averaged.** The SLI is `good / total` where *good* = requests in buckets ≤ 50 ms, taken from an OTel **explicit-bucket histogram** with a boundary exactly at the threshold. Never `avg()` or `quantile()` a p99 across instances or windows — recompute from summed bucket counts.
+  - Bucket boundaries must straddle the target, e.g. `[5, 10, 25, 50, 100, 250, 500, 1000] ms`; a missing 50 ms boundary makes the SLI uncomputable.
+  - **Implemented and measured 2026-08-24.** Buckets live in `apps/url-shortener-node/src/otel.ts` as `LATENCY_BUCKETS_S`, enforced by an OTel `View` with `ExplicitBucketHistogramAggregation`, and guarded by a unit test asserting the 0.05 boundary exists. First real reading over 322,924 requests at 8,070 req/s: **SLI = 99.8943%**, 10.6% of the error budget consumed.
+  - **Evidence that counting beats interpolating.** An earlier draft of this spec claimed a 33% gap between k6's client-side p99 and `histogram_quantile()`. That comparison was invalid — the two numbers came from different time windows. On matched data (364,240 requests, k6 `p(99)=22.47 ms`) `histogram_quantile` returns 22.82 ms, an error of only **1.6%**. Interpolation is not, in general, wildly wrong.
+  - The real argument is about **bucket width, not interpolation per se**, and it is sharper. Interpolation assumes a uniform distribution inside the bucket, which latency never has. With the 0.05 boundary present, the SLI is counted exactly: 363,609 / 364,240 = **99.8268%**, consuming **17.3%** of the budget. Remove that one boundary and the nearest enclosing bucket becomes `0.025 → 0.1`; estimating the same SLI by interpolation gives 99.5633%, i.e. **43.7%** of the budget — the same data reporting **2.5× the error-budget burn**. That factor is bounded only by how wide the bucket is, which is why the boundary must sit exactly at the threshold.
+  - So `histogram_quantile` is fine for dashboards and trends; the error budget uses the counted ratio.
 - `rules.yml`: a recording rule for the SLI + a **multi-window multi-burn-rate** alert (fast + slow windows, Google-SRE style) that fires on error-budget burn. Surfaced in the SLO dashboard; no external routing.
+- **Implemented 2026-08-24.** Error ratio recorded at 5m/30m/1h/6h/3d; three burn alerts (14.4× critical on 1h+5m, 6× warning on 6h+30m, 1× ticket on 3d+6h) plus an `absent()` guard. Validated with `promtool check rules` (11 rules) and unit-tested with `promtool test rules` — four cases including the two negatives that matter: healthy traffic must fire nothing, and an 8× burn must fire *high* without firing critical.
+- **Known gap, deliberately surfaced rather than hidden:** the latency SLI filters to `status="302"`, so during a total outage it goes **absent, not bad** — no successful redirects exist to be slow, and a latency-only dashboard stays green while the service is down. `RedirectLatencySLIMissing` makes this visible; the real fix is a separate **availability SLO**, still unwritten. This is the direct consequence of the 2026-08-24 decision to demote availability to a dashboard panel.
+- Availability stays a **dashboard panel**, not the SLO — tracked, but not the thing with an error budget.
 
 ### 5. Game-day
 - `gameday.md` + a script: with the stack + apps + k6 load running, kill Redis (and/or inject latency), and observe: the SLO burn-rate panel reacting, the USE cache-hit/saturation signal dropping, and the failing request's trace in Tempo. Confirms the pipeline answers "what broke and why" end-to-end.
@@ -123,8 +134,14 @@ exemplar jumps to the trace; the trace_id greps the logs.
 
 - **`OTEL_ENABLED` unset → full no-op** (SDK never starts); existing test suites stay green with zero OTel overhead.
 - **Collector down** → app OTLP export fails silently (batch dropped); the app keeps serving. Never let telemetry failure break request handling.
+- **Span loss under load is real and silent — but the 2026-08-24 diagnosis of its cause was wrong.** Measured at 8,166 req/s with traces going to the Collector's `debug` exporter: 980,125 requests produced 1.00 span each, and the Collector accepted only **718,942 — 26.6% dropped**, with `refused` and `send_failed` both zero. That much still holds: the loss was app-side, in the SDK's `BatchSpanProcessor` queue, and nothing logged a warning.
+  - **The cause was the `debug` exporter, not an inherent SDK limit.** Re-measured 2026-08-25 after slice 2 pointed traces at Tempo over OTLP gRPC — same app, same SDK, same default `maxQueueSize` of 2048, and **100% sampling**: 471,176 requests at **10,466 req/s produced 471,177 spans, zero loss**. Higher throughput than the failing run, and nothing dropped. `debug` with `verbosity: detailed` formats every span to stdout; that throttled the Collector, which backpressured the app's exporter, which overflowed the queue. A debugging aid became the bottleneck it appeared to be diagnosing.
+  - **Consequence for the SLI is unchanged, and still correct.** Metrics aggregate in-process and cannot drop per-event; traces can, whenever the pipeline behind them stalls. The SLI stays on histogram buckets. A trace explains a spike; it does not count one.
+  - **Sampling is still worth having, for cost rather than correctness.** `parentbased_traceidratio` is wired via `npm run load:otel` (default 10%), measured at 9.93% over 407,143 requests. Note `tsx watch` does **not** propagate the sampler env to the server it re-spawns, so `dev:otel` always runs at 100% — hence the separate non-watch script.
+  - Add app-side SDK self-telemetry so any future drop is visible instead of inferred by arithmetic.
 - **A DB down** → its Collector receiver reports the target down (visible as missing/zero USE metrics), which is itself signal.
 - **Cardinality guard:** route label uses the matched route template (never raw path) — carry forward the `?? "unknown"` fix so unmatched paths can't explode cardinality.
+- **Second cardinality guard, learned the hard way (2026-08-24):** the Collector's prometheus exporter must keep `resource_to_telemetry_conversion` **disabled**. Enabling it copies every resource attribute onto every series — `process_pid`, `process_command_args` (the full argv, hundreds of bytes), `process_executable_path`, `host_id` — taking each series from 1 label to 17, and `process_pid` alone mints a fresh time series on every restart. The exporter already derives `job=` from `service.name` and `instance=` from `service.instance.id`, which is the identity actually needed.
 
 ## Testing
 
@@ -133,6 +150,11 @@ exemplar jumps to the trace; the trace_id greps the logs.
 - **Collector config validation:** `otelcol validate` (or container `--dry-run`) on `otel-collector-config.yaml`.
 - **Stack smoke test:** bring up the stack + one app with `OTEL_ENABLED=1`, drive one request, assert (a) the service appears as a Prometheus target/metric, (b) a trace lands in Tempo, (c) the log line carries a `trace_id`.
 - **Game-day is the integration test** for the SLO/alert path (manual, documented).
+
+## Decisions (resolved 2026-08-24)
+
+- **url-shortener metrics path — full OTel migration.** The OTel SDK exports traces + metrics over OTLP to the Collector; the prom-client `/metrics` route is removed rather than kept alongside. One instrumentation contract, one pipeline. Cost accepted: the existing prom-client instrumentation is rewritten, and the k6 dashboards are re-pointed at the Prometheus metrics the Collector exposes.
+- **First SLO — p99 latency** (see §4). Availability is demoted to a dashboard panel.
 
 ## Open questions
 

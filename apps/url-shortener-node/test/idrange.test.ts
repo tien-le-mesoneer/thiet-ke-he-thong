@@ -1,10 +1,12 @@
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { getDb, counters, closeDb } from "../src/db.js";
+import { getDb, counters, links, closeDb } from "../src/db.js";
 import { makeAllocator } from "../src/modules/links/idrange.js";
 
 before(async () => { await getDb(); });
-beforeEach(async () => { const db = await getDb(); await counters(db).deleteMany({}); });
+// counters and links are coupled: short codes are derived from the counter,
+// so resetting one without the other re-issues codes that already exist.
+beforeEach(async () => { const db = await getDb(); await counters(db).deleteMany({}); await links(db).deleteMany({}); });
 after(async () => { await closeDb(); });
 
 test("nextId yields strictly increasing ids starting at 1", async () => {

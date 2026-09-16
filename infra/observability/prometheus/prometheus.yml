@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 15s
+
+
+rule_files:
+  - /etc/prometheus/rules.yml
+
+# Drop-in scrape jobs. Anything in this directory is picked up without editing
+# the file above, so a temporary stack (the broker spike) can add targets and
+# then remove them without leaving permanently-DOWN jobs behind.
+scrape_config_files:
+  - /etc/prometheus/scrape/*.yml
+
+scrape_configs:
+  # App metrics, forwarded by the Collector's prometheus exporter.
+  - job_name: otel-collector-apps
+    static_configs:
+      - targets: ["otel-collector:8889"]
+
+  # The Collector's own health: how many spans/points it accepted vs dropped.
+  # If app metrics ever look wrong, check here first.
+  - job_name: otel-collector-self
+    static_configs:
+      - targets: ["otel-collector:8888"]

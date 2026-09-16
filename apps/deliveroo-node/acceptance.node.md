@@ -13,14 +13,14 @@ loads this file when `active_impl: node`.
 | Concept | Type | Concrete check (Node) |
 |---------|------|-----------------------|
 | `W1.health` | grep | `/health` route in `src/index.ts` |
-| `W1.config` | file | `src/config.ts` exists; `compose.yaml` present |
+| `W1.config` | file | `src/config.ts` exists; root `compose.yaml` defines the `postgres` service |
 | `W1.logging` | grep | `pino` wired in `src/index.ts` / `package.json` |
 | `W1.modules` | codegraph | dirs `src/modules/{users,catalog,orders,payments}` each with routes/service |
 | `W1.migrations` | file+test | `migrations/001_init.sql`; `npm run migrate` succeeds |
 | `W1.build` | build | `npm run typecheck` exits 0 |
 | `W2.state-machine` | codegraph | `TRANSITIONS` const + `canTransition` in `src/modules/orders/service.ts` |
-| `W2.enforced` | codegraph | status writes in `placeOrder` route through `canTransition` (OPEN: currently sets `PAYMENT_PENDING`/`PAID`/`CANCELLED` directly at `service.ts:67,83`) |
-| `W2.tests-exist` | file | `test/` dir with an order-flow test |
+| `W2.enforced` | codegraph | status writes in `placeOrder` route through `canTransition` — `transitionOrder` in `src/modules/orders/service.ts` is the only `SET status` on `orders.orders` |
+| `W2.tests-exist` | file | `test/order-flow.test.ts` + `test/transitions.test.ts`; `test/setup.ts` refuses a non-`_test` database |
 | `W2.flow` | test | `npm test` passes the order-flow case |
 | `W3.pessimistic` | grep | `SELECT … FOR UPDATE` in the stock read in `src/modules/orders/service.ts` |
 | `W3.optimistic` | grep | `UPDATE catalog.menu_items SET stock = stock - $1, version = version + 1 … WHERE … AND version = $` |

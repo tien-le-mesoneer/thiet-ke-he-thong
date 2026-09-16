@@ -1,0 +1,416 @@
+{
+  "uid": "slo-redirect-latency",
+  "title": "SLO \u2014 Redirect Latency",
+  "description": "99% of redirects under 50 ms over 30 days. The SLI is COUNTED from the le=0.05 histogram bucket, never interpolated \u2014 deleting that bucket boundary inflates reported burn by ~2.5x. Slice 4 of the observability build.",
+  "tags": [
+    "observability",
+    "slo",
+    "slice-4"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "SLI \u2014 successful redirects under 50 ms",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "description": "Counted from the le=0.05 bucket. Target 99%.",
+      "targets": [
+        {
+          "expr": "(1 - slo:redirect_latency_errors:ratio_rate5m) * 100",
+          "legendFormat": "SLI",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {},
+          "decimals": 4,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 99
+              },
+              {
+                "color": "green",
+                "value": 99.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Error budget remaining",
+      "type": "gauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "description": "100% means the full 1% budget is intact. 0% means it is spent and every further slow request is a violation.",
+      "targets": [
+        {
+          "expr": "(1 - (slo:redirect_latency_errors:ratio_rate5m / 0.01)) * 100",
+          "legendFormat": "remaining",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {},
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 25
+              },
+              {
+                "color": "green",
+                "value": 50
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Current burn rate",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "description": "1x = spending the budget exactly as fast as the 30-day window refills it. 14.4x = the whole budget gone in ~2 days.",
+      "targets": [
+        {
+          "expr": "slo:redirect_latency:burnrate1h",
+          "legendFormat": "1h burn",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {},
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 6
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "p99 latency (dashboard only \u2014 not the SLI)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "description": "Interpolated inside its bucket, so it is a trend indicator. The error budget above never uses this number.",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{route=\"/:code\",status=\"302\"}[5m])))",
+          "legendFormat": "p99",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {},
+          "decimals": 4,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.05
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Burn rate by window \u2014 with alert thresholds",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 9
+      },
+      "description": "Each alert pairs a LONG window (is this real?) with a SHORT one (is it still happening?).\n\nThe long window suppresses brief spikes; the short window lets the alert clear quickly on recovery instead of smouldering for the length of the long window.\n\nThresholds: 14.4x critical (2% of budget per hour), 6x high (5% per 6h), 1x ticket (sustainable ceiling).",
+      "targets": [
+        {
+          "expr": "slo:redirect_latency_errors:ratio_rate5m / 0.01",
+          "legendFormat": "5m  (short window, critical pair)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "instant": false
+        },
+        {
+          "expr": "slo:redirect_latency_errors:ratio_rate1h / 0.01",
+          "legendFormat": "1h  (long window, critical pair)",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "instant": false
+        },
+        {
+          "expr": "slo:redirect_latency_errors:ratio_rate6h / 0.01",
+          "legendFormat": "6h  (long window, high pair)",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "fillOpacity": 6,
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "#EAB839",
+                "value": 1
+              },
+              {
+                "color": "orange",
+                "value": 6
+              },
+              {
+                "color": "red",
+                "value": 14.4
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Request rate by latency bucket (the SLI's raw material)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "description": "good/total is the SLI, counted straight from bucket le=0.05. No interpolation anywhere in this panel.",
+      "targets": [
+        {
+          "expr": "sum(rate(http_request_duration_seconds_bucket{route=\"/:code\",status=\"302\",le=\"0.05\"}[5m]))",
+          "legendFormat": "under 50ms (good)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "instant": false
+        },
+        {
+          "expr": "sum(rate(http_request_duration_seconds_count{route=\"/:code\",status=\"302\"}[5m]))",
+          "legendFormat": "total",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "Slow redirects per second (the budget being spent)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "description": "Every request on this line consumes error budget. Flat zero is the goal.",
+      "targets": [
+        {
+          "expr": "sum(rate(http_request_duration_seconds_count{route=\"/:code\",status=\"302\"}[5m])) - sum(rate(http_request_duration_seconds_bucket{route=\"/:code\",status=\"302\",le=\"0.05\"}[5m]))",
+          "legendFormat": "over 50ms",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          }
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

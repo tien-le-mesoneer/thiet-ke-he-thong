@@ -1,10 +1,10 @@
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { getDb, links, closeDb, type LinkDoc } from "../src/db.js";
+import { getDb, links, counters, closeDb, type LinkDoc } from "../src/db.js";
 import { insertLink, findByCode, bumpClicks, shardFor } from "../src/modules/links/repo.js";
 
 before(async () => { await getDb(); });
-beforeEach(async () => { const db = await getDb(); await links(db).deleteMany({}); });
+beforeEach(async () => { const db = await getDb(); await links(db).deleteMany({}); await counters(db).deleteMany({}); });
 after(async () => { await closeDb(); });
 
 function doc(code: string): LinkDoc {

@@ -14,3 +14,5 @@ Assumes startup already passed auth and read progress. Usage: `/learn-sd exercis
    `git add docs/exercises/<plan_week>-<topic>.md && git commit -m "docs(exercise): week <plan_week> <topic> attempt + gap analysis"`
 
 5. **Update progress.** Add `<topic>` to `exercises_done`; append clearly-missed items to `weak_concepts`; add a dated `## Log` line. These weak concepts now weight future quizzes and tutoring.
+
+6. **Offer a takeaway note (ask first).** Offer to capture the single biggest lesson from the gap analysis as a study note. If the user agrees, run the `note` auto-capture flow (`references/note.md`) with `source: exercise:<topic>`.
