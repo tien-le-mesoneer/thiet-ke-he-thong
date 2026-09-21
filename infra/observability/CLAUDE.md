@@ -44,9 +44,17 @@ health **7133** · app-metrics **7889**. All ports in `.env`.
 
 ## Alerts
 
-`prometheus/rules.yml` — SLO is 99% of redirects under 50 ms / 30 days.
-Multi-window burn-rate: 14.4× critical (1h+5m), 6× warning (6h+30m), 1× ticket
-(3d+6h), plus an `absent()` guard.
+`prometheus/rules.yml` — **two** SLOs, 22 rules, 9 promtool tests.
+
+| SLO | Target | Budget / 30d | SLI |
+|---|---|---|---|
+| Redirect latency | 99% under 50 ms | 1% | `le="0.05"` bucket / total 302s |
+| Redirect availability | 99.9% non-5xx | 0.1% = 43.2 min | 5xx / **all** requests to `/:code` |
+
+Both use the same multi-window burn-rate shape: 14.4× critical (1h+5m), 6×
+warning (6h+30m), 1× ticket (3d+6h). Availability thresholds are 10× smaller
+because its budget is 10× tighter, and its `for:` is shorter — a slow redirect
+can wait two minutes, a 5xx storm cannot.
 
 Change a rule → run the unit tests:
 
@@ -58,11 +66,20 @@ podman run --rm --entrypoint promtool -v "$PWD/infra/observability/prometheus:/p
 That bucket edge must match the SLO threshold exactly; without it the reported
 burn inflates ~2.5×. `histogram_quantile()` is for dashboards only.
 
-**Known gap:** the SLI filters `status="302"`, so a total outage makes it go
-*absent*, not *bad*. `RedirectLatencySLIMissing` covers it; a real availability
-SLO is still unwritten.
+**The latency SLI filters `status="302"`, so a total outage makes it go
+*absent*, not *bad*** — the game-day's worst finding. That gap is now closed by
+the availability SLO, whose denominator counts failures and so reads 100% error
+instead of vanishing. Two guards cover the case neither SLI can see — a dead
+process exports nothing at all, and after ~5 min Prometheus ages the series out:
+`RedirectTrafficAbsent` (2 min, critical, unfiltered by status) and the older
+`RedirectLatencySLIMissing` (10 min, warning, 302-only).
+
+**404 is not an availability error.** An unknown short code is a correct
+answer; only 5xx counts. A test asserts this, because a crawler walking random
+codes would otherwise drain a 43-minute budget in minutes.
 
 ## Status
 
-Slices 1–4 done (pipeline, Tempo, OTel metrics + SLI, burn-rate alerts).
-Slice 5 — game-day — remains. Details in `README.md`.
+All five slices done: pipeline, Tempo, OTel metrics + SLI, burn-rate alerts,
+and the 2026-08-30 game-day (which found three real bugs and the availability
+gap now closed above). Details in `README.md` and `gameday.md`.

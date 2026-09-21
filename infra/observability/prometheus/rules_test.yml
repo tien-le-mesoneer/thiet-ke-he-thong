@@ -104,3 +104,131 @@ tests:
             exp_annotations:
               summary: "Redirect latency SLI has no data — cannot tell healthy from dead"
               description: "No successful redirects recorded for 10 minutes. Either traffic stopped or every request is failing. A latency SLO cannot distinguish the two; check availability."
+
+  # ==================================================================
+  # AVAILABILITY SLO TESTS
+  # ==================================================================
+
+  # ------------------------------------------------------------------
+  # THE GAME-DAY CASE. Every request 5xx: the thing that happened on
+  # 2026-08-30 and that every existing alert slept through.
+  #
+  # The latency SLI goes absent (no 302s to be slow). The availability
+  # SLI reads 100% error, because its denominator counts the failures
+  # too. That difference is the entire reason this SLO exists, so it is
+  # asserted in both directions in one test.
+  # ------------------------------------------------------------------
+  - interval: 1m
+    name: total 5xx outage fires availability critical, not just the latency guard
+    input_series:
+      - series: 'http_request_duration_seconds_count{route="/:code",status="500"}'
+        values: '0+100x180'
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: RedirectAvailabilityBudgetBurnCritical
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              slo: redirect-availability
+            exp_annotations:
+              summary: "Redirect availability burning 14.4x — 2% of the 30d budget per hour"
+              description: "More than 1.44% of redirect requests are returning 5xx over the last hour, and still are over the last 5 minutes. The 30-day budget is 43.2 minutes; at this rate it is gone in about 2 days."
+      # Traffic IS flowing — the silence guard must stay quiet and let the
+      # burn alert own this case.
+      - eval_time: 120m
+        alertname: RedirectTrafficAbsent
+        exp_alerts: []
+
+  # ------------------------------------------------------------------
+  # THE NEGATIVE THAT MATTERS MOST. A crawler walking random short codes
+  # produces a 100% 404 rate. Those are CORRECT responses. If any
+  # availability alert fires here the SLI is wrong, and the first real
+  # bot sweep would burn a 43-minute budget in minutes.
+  # ------------------------------------------------------------------
+  - interval: 1m
+    name: a storm of 404s burns no availability budget
+    input_series:
+      - series: 'http_request_duration_seconds_count{route="/:code",status="404"}'
+        values: '0+500x600'
+    alert_rule_test:
+      - eval_time: 500m
+        alertname: RedirectAvailabilityBudgetBurnCritical
+        exp_alerts: []
+      - eval_time: 500m
+        alertname: RedirectAvailabilityBudgetBurnHigh
+        exp_alerts: []
+      - eval_time: 500m
+        alertname: RedirectAvailabilityBudgetBurnSlow
+        exp_alerts: []
+      - eval_time: 500m
+        alertname: RedirectTrafficAbsent
+        exp_alerts: []
+
+  # ------------------------------------------------------------------
+  # Healthy service: 99.95% success, a 0.5x burn — inside budget.
+  # Nothing may fire. Catches a threshold written with the latency
+  # budget (0.01) instead of the availability one (0.001).
+  # ------------------------------------------------------------------
+  - interval: 1m
+    name: healthy availability fires nothing
+    input_series:
+      - series: 'http_request_duration_seconds_count{route="/:code",status="302"}'
+        values: '0+2000x600'
+      - series: 'http_request_duration_seconds_count{route="/:code",status="500"}'
+        values: '0+1x600'
+    alert_rule_test:
+      - eval_time: 500m
+        alertname: RedirectAvailabilityBudgetBurnCritical
+        exp_alerts: []
+      - eval_time: 500m
+        alertname: RedirectAvailabilityBudgetBurnHigh
+        exp_alerts: []
+
+  # ------------------------------------------------------------------
+  # 8x burn: above the 6x "high" threshold, below 14.4x. High fires,
+  # critical stays quiet. The copy-paste check, mirroring the latency
+  # test of the same shape.
+  # ------------------------------------------------------------------
+  - interval: 1m
+    name: 8x availability burn fires high but not critical
+    input_series:
+      - series: 'http_request_duration_seconds_count{route="/:code",status="302"}'
+        values: '0+992x600'
+      - series: 'http_request_duration_seconds_count{route="/:code",status="500"}'
+        values: '0+8x600'
+    alert_rule_test:
+      - eval_time: 500m
+        alertname: RedirectAvailabilityBudgetBurnCritical
+        exp_alerts: []
+      - eval_time: 500m
+        alertname: RedirectAvailabilityBudgetBurnHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              slo: redirect-availability
+            exp_annotations:
+              summary: "Redirect availability burning 6x — 5% of the 30d budget per 6h"
+              description: "A steady trickle of server errors rather than an outage. Find the failing path before it becomes one."
+
+  # ------------------------------------------------------------------
+  # Process gone: no series at all, not even failures. The burn alerts
+  # cannot fire (nothing to divide) — only the silence guard can.
+  # ------------------------------------------------------------------
+  - interval: 1m
+    name: total silence trips the traffic guard
+    input_series:
+      - series: 'up{job="otel-collector-apps"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: RedirectTrafficAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              slo: redirect-availability
+            exp_annotations:
+              summary: "No redirect requests recorded at all — service may be dead"
+              description: "Not a single redirect request has been observed for 2 minutes, successful or failed. Either the process is down, the OTel pipeline is broken, or traffic genuinely stopped. All three are worth waking up for; a green dashboard here means nothing."
+      - eval_time: 30m
+        alertname: RedirectAvailabilityBudgetBurnCritical
+        exp_alerts: []

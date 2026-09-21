@@ -107,7 +107,7 @@ infra/observability/
 - **Grafana:** provisioned Prometheus + Tempo datasources; provisioned dashboards; exemplars enabled so p99 panels link to traces.
 
 ### 4. SLO + burn-rate alert
-- Define **one SLO** (decided 2026-08-24): url-shortener redirect **latency** — 99% of redirects served in < 50 ms over 30 days. The SLI is a latency percentile, not availability, so the pipeline exercises histogram buckets and tail behaviour end-to-end.
+- Define **one SLO** (decided 2026-08-24): url-shortener redirect **latency** — 99% of redirects served in < 50 ms over 30 days. The SLI is a latency percentile, not availability, so the pipeline exercises histogram buckets and tail behaviour end-to-end. *(Superseded 2026-09-21: a second SLO, redirect availability, was added after the game-day showed why latency alone is not enough — see the gap note below.)*
   - Baseline: k6 measured p99 = 18.06 ms at low load, but a 2026-08-24 ramp to 200 VUs (980k requests, 8,166 req/s) measured **p99 = 41.65 ms — 83% of the 50 ms budget**. The target is real but the headroom is thin at peak, so the burn-rate alert in slice 4 will actually have something to fire on. Distribution from that run: mean 11.4 ms, p50 9.92 ms, p90 21.04 ms, p95 25.94 ms, p99 41.65 ms, max 145.19 ms — the mean sits next to the median and says nothing about the tail, which is the whole argument for percentile SLIs.
   - **Latency SLIs are counted, not averaged.** The SLI is `good / total` where *good* = requests in buckets ≤ 50 ms, taken from an OTel **explicit-bucket histogram** with a boundary exactly at the threshold. Never `avg()` or `quantile()` a p99 across instances or windows — recompute from summed bucket counts.
   - Bucket boundaries must straddle the target, e.g. `[5, 10, 25, 50, 100, 250, 500, 1000] ms`; a missing 50 ms boundary makes the SLI uncomputable.
@@ -117,7 +117,16 @@ infra/observability/
   - So `histogram_quantile` is fine for dashboards and trends; the error budget uses the counted ratio.
 - `rules.yml`: a recording rule for the SLI + a **multi-window multi-burn-rate** alert (fast + slow windows, Google-SRE style) that fires on error-budget burn. Surfaced in the SLO dashboard; no external routing.
 - **Implemented 2026-08-24.** Error ratio recorded at 5m/30m/1h/6h/3d; three burn alerts (14.4× critical on 1h+5m, 6× warning on 6h+30m, 1× ticket on 3d+6h) plus an `absent()` guard. Validated with `promtool check rules` (11 rules) and unit-tested with `promtool test rules` — four cases including the two negatives that matter: healthy traffic must fire nothing, and an 8× burn must fire *high* without firing critical.
-- **Known gap, deliberately surfaced rather than hidden:** the latency SLI filters to `status="302"`, so during a total outage it goes **absent, not bad** — no successful redirects exist to be slow, and a latency-only dashboard stays green while the service is down. `RedirectLatencySLIMissing` makes this visible; the real fix is a separate **availability SLO**, still unwritten. This is the direct consequence of the 2026-08-24 decision to demote availability to a dashboard panel.
+- **Gap found, then closed (2026-09-21).** The latency SLI filters to `status="302"`, so during a total outage it went **absent, not bad** — no successful redirects existed to be slow, and the dashboard stayed green while the service was down. The 2026-08-30 game-day proved it: Redis was killed, the process died, and every alert was inactive for ~15 minutes. This was the direct consequence of the 2026-08-24 decision to demote availability to a dashboard panel, and it took a deliberate failure to expose it.
+
+  **The second SLO now exists:** redirect availability, 99.9% of requests to `/:code` served without a 5xx, over 30 days — a 0.1% budget, 43.2 minutes. The design point is the *denominator*: it counts **all** requests, not just successful ones, so a total failure reads 100% error rather than vanishing. Same multi-window burn-rate structure as latency, thresholds 10× smaller, `for:` shorter.
+
+  Two deliberate decisions inside it, both asserted by tests:
+
+  - **404 is not an error.** An unknown short code is a correct answer. Only 5xx counts — otherwise a crawler walking random codes drains the whole budget in minutes. (This distinction has already cost us once: a k6 run measured 112k 404s as successes.)
+  - **A process that exports nothing still needs an alarm.** The availability SLI survives "every request 5xx" but not "no requests at all" — a dead process emits no series, and Prometheus ages what remains out after ~5 minutes. `RedirectTrafficAbsent` (2 min, critical, unfiltered by status) is the alert for that, and it stays quiet during a 5xx storm so the burn alert owns that case cleanly.
+
+  Verified with `promtool test rules`: 9 tests, 22 rules, including the game-day scenario itself (total 5xx → availability critical fires, traffic guard does not) and the 404-storm negative.
 - Availability stays a **dashboard panel**, not the SLO — tracked, but not the thing with an error budget.
 
 ### 5. Game-day
