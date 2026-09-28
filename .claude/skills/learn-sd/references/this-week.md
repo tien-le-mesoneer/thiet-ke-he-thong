@@ -4,7 +4,7 @@ Assumes startup already passed auth and read progress.
 
 ## 1. Orient
 
-Read `plan_week`, `elapsed_week`, `active_impl`, `weak_concepts` from `docs/system-design-progress.md`. Compute `slippage = elapsed_week - plan_week`. Read the `plan_week` block (Read / Build / Exercise) from `docs/system-design-plan-detailed.md`.
+Read `plan_week`, `elapsed_week`, `active_impl`, `weak_concepts` from `docs/study/progress.md`. Compute `slippage = elapsed_week - plan_week`. Read the `plan_week` block (Read / Build / Exercise) from `docs/study/plan-detailed.md`.
 
 ## 2. Present the agenda
 
@@ -19,7 +19,7 @@ Score verbally. Update `weak_concepts`: append clearly-missed topics, remove one
 
 ## 4. Build check (the alignment gate)
 
-1. From `docs/system-design-acceptance.md`, take this week's concept IDs.
+1. From `docs/study/acceptance.md`, take this week's concept IDs.
 2. Load `apps/<active_impl>/acceptance.<lang>.md` (for `node`: `apps/deliveroo-node/acceptance.node.md`).
 3. For each concept, run the concrete check by its type and mark GREEN only if the tool confirms it:
    - `codegraph` → `codegraph_search` / `codegraph_callers` / `codegraph_impact` for the named symbol/edge.

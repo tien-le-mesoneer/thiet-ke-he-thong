@@ -8,7 +8,7 @@
 
 **Tech Stack:** Node 22 (ESM), `kafkajs` 2.2, `amqplib` 0.10, podman compose, Prometheus 3.2.1 + Grafana 11.5.2 (already running), Kafka 3.9 KRaft single node, RabbitMQ 4.0.9.
 
-**Spec:** `docs/superpowers/specs/2026-09-14-broker-kafka-vs-rabbitmq.md`
+**Spec:** `docs/decisions/0007-broker-kafka-vs-rabbitmq.md`
 
 ## Global Constraints
 
@@ -80,8 +80,8 @@ Tasks 3, 7, 8, 9, 10 are completeness. They fill the table; they will not flip i
 | `infra/broker-spike/exp/scale.mjs` | **Create.** Consumer count sweep and message size sweep. |
 | `infra/broker-spike/exp/trace.mjs` | **Create.** Does an OTel trace survive the broker hop. |
 | `infra/broker-spike/research.md` | **Create.** Tier C findings with sources and dates. |
-| `docs/superpowers/specs/2026-09-14-broker-kafka-vs-rabbitmq.md` | **Modify.** Replace the nine-criterion scorecard with the full 20-aspect table; add any contradictions found. |
-| `docs/system-design-progress.md` | **Modify.** One dated log entry when the evaluation closes. |
+| `docs/decisions/0007-broker-kafka-vs-rabbitmq.md` | **Modify.** Replace the nine-criterion scorecard with the full 20-aspect table; add any contradictions found. |
+| `docs/study/progress.md` | **Modify.** One dated log entry when the evaluation closes. |
 
 ---
 
@@ -1246,8 +1246,8 @@ git commit -m "docs(broker-spike): research pack for the aspects a single node c
 **Aspect: 20**, plus the scorecard rewrite. This is where the evaluation either confirms the decision or overturns it.
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-09-14-broker-kafka-vs-rabbitmq.md`
-- Modify: `docs/system-design-progress.md`
+- Modify: `docs/decisions/0007-broker-kafka-vs-rabbitmq.md`
+- Modify: `docs/study/progress.md`
 
 - [ ] **Step 1: Replace the nine-criterion scorecard with the full 20-aspect table**
 
@@ -1268,12 +1268,12 @@ Change `**Status:** Proposed` to `**Status:** Accepted` (or `Superseded by …`)
 
 - [ ] **Step 4: Log it**
 
-Append one dated entry to `docs/system-design-progress.md` following the existing style: what was measured, what contradicted, what the decision became. Add any new weak concepts.
+Append one dated entry to `docs/study/progress.md` following the existing style: what was measured, what contradicted, what the decision became. Add any new weak concepts.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/superpowers/specs/2026-09-14-broker-kafka-vs-rabbitmq.md docs/system-design-progress.md
+git add docs/decisions/0007-broker-kafka-vs-rabbitmq.md docs/study/progress.md
 git commit -m "docs(adr): complete the 20-aspect broker evaluation and settle the decision"
 ```
 

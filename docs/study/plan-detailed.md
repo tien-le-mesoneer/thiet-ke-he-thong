@@ -1,6 +1,6 @@
 # System Design Plan — Week-by-Week Detail
 
-Companion to `system-design-learning-plan.md`. Each week: ~4 hrs reading, ~4-5 hrs building, ~1-2 hrs one timed design exercise (45 min cold attempt → compare with Xu's solution → write down what you missed).
+Companion to `learning-plan.md`. Each week: ~4 hrs reading, ~4-5 hrs building, ~1-2 hrs one timed design exercise (45 min cold attempt → compare with Xu's solution → write down what you missed).
 
 ---
 

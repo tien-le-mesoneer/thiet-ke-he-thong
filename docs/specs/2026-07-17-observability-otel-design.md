@@ -80,7 +80,7 @@ infra/observability/
   grafana/provisioning/datasources/*.yaml     # Prometheus + Tempo datasources
   grafana/provisioning/dashboards/*.yaml      # dashboard provider
   grafana/dashboards/red.json  use.json  slo.json
-  gameday.md                                  # chaos exercise + script
+  gameday.md                                  # chaos exercise (landed at docs/operations/postmortems/2026-08-30-redis-gameday.md)
   README.md
 ```
 
@@ -130,7 +130,7 @@ infra/observability/
 - Availability stays a **dashboard panel**, not the SLO — tracked, but not the thing with an error budget.
 
 ### 5. Game-day
-- `gameday.md` + a script: with the stack + apps + k6 load running, kill Redis (and/or inject latency), and observe: the SLO burn-rate panel reacting, the USE cache-hit/saturation signal dropping, and the failing request's trace in Tempo. Confirms the pipeline answers "what broke and why" end-to-end.
+- `gameday.md` (now `docs/operations/postmortems/2026-08-30-redis-gameday.md`) + a script: with the stack + apps + k6 load running, kill Redis (and/or inject latency), and observe: the SLO burn-rate panel reacting, the USE cache-hit/saturation signal dropping, and the failing request's trace in Tempo. Confirms the pipeline answers "what broke and why" end-to-end.
 
 ## Data flow
 

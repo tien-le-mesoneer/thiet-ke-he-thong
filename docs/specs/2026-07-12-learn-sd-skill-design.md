@@ -7,8 +7,8 @@
 ## Purpose
 
 A single user-invocable skill, `/learn-sd`, that runs the 16-week system-design
-study plan in `docs/system-design-learning-plan.md` +
-`docs/system-design-plan-detailed.md`. It combines three jobs behind one skill:
+study plan in `docs/study/learning-plan.md` +
+`docs/study/plan-detailed.md`. It combines three jobs behind one skill:
 
 1. **Weekly driver** — orients you to the current week, quizzes the reading,
    checks your build against the concepts.
@@ -46,16 +46,16 @@ build later.
 
 ```
 .claude/skills/learn-sd/SKILL.md          # the skill: 3 modes, notebook id, auth check, slippage logic
-docs/system-design-progress.md            # progress state incl. active_impl (new, committed)
-docs/system-design-acceptance.md          # CONCEPT-level definition-of-done, stable IDs (committed)
-docs/exercises/<planweek>-<topic>.md      # exercise attempts + gap analysis (milestone deliverable)
+docs/study/progress.md            # progress state incl. active_impl (new, committed)
+docs/study/acceptance.md          # CONCEPT-level definition-of-done, stable IDs (committed)
+docs/study/exercises/<planweek>-<topic>.md      # exercise attempts + gap analysis (milestone deliverable)
 apps/<impl>/acceptance.<lang>.md          # per-impl manifest: concept ID → concrete check
 apps/deliveroo-node/                       # current TS implementation
 ```
 
 Reused, not rebuilt:
-- `docs/system-design-learning-plan.md`, `docs/system-design-plan-detailed.md` — the syllabus.
-- `docs/system-design-acceptance.md` + `apps/<impl>/acceptance.<lang>.md` — the
+- `docs/study/learning-plan.md`, `docs/study/plan-detailed.md` — the syllabus.
+- `docs/study/acceptance.md` + `apps/<impl>/acceptance.<lang>.md` — the
   machine-checkable acceptance criteria (Component 3): concepts shared, concrete
   checks per language. The build check reads them instead of guessing.
 - The implementation's own TODOs / `⚠️` markers (e.g. the race-condition comment
@@ -72,7 +72,7 @@ Reused, not rebuilt:
 
 ## Component 1 — Progress state
 
-**File:** `docs/system-design-progress.md`, committed, read at the start of every
+**File:** `docs/study/progress.md`, committed, read at the start of every
 invocation and rewritten as progress is made.
 
 ```markdown
@@ -118,7 +118,7 @@ and stop. Then read the progress file.
    full agenda.
 3. **Read:** offer a short quiz via `notebooklm ask` grounded in the notebook,
    weighted toward `weak_concepts`. Score verbally; update `weak_concepts`.
-4. **Build:** read this week's concepts in `docs/system-design-acceptance.md`,
+4. **Build:** read this week's concepts in `docs/study/acceptance.md`,
    load the manifest for `active_impl` (`apps/<impl>/acceptance.<lang>.md`), and
    **run each concept's concrete check with the tool it names** (Component 3) —
    not a vibes-based read. Present the green/red list. Never mark a `codegraph`/
@@ -145,13 +145,13 @@ and stop. Then read the progress file.
 3. **Grade:** query the notebook for the canonical approach; produce a gap
    analysis structured by the plan's template (requirements → estimates → API →
    data model → high-level design → deep dive → bottlenecks & trade-offs).
-4. Write attempt + gap analysis to `docs/exercises/<plan_week>-<topic>.md` and
+4. Write attempt + gap analysis to `docs/study/exercises/<plan_week>-<topic>.md` and
    commit it (this is the "4 written design docs" milestone deliverable).
 5. Add missed items to `weak_concepts`; add the topic to `exercises_done`.
 
 ## Component 3 — Acceptance criteria & build verification
 
-**Files:** `docs/system-design-acceptance.md` (shared, concept-level) +
+**Files:** `docs/study/acceptance.md` (shared, concept-level) +
 `apps/<impl>/acceptance.<lang>.md` (per-implementation manifest), both committed.
 The shared doc lists **concepts** with stable IDs (`W3.pessimistic`) — the
 machine-checkable "definition of done" that keeps coding aligned with the

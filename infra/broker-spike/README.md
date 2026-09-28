@@ -1,6 +1,6 @@
 # broker-spike
 
-Throwaway stack backing **`docs/superpowers/specs/2026-09-14-broker-kafka-vs-rabbitmq.md`**
+Throwaway stack backing **`docs/decisions/0007-broker-kafka-vs-rabbitmq.md`**
 (the Week 7 broker ADR). Delete this directory once the decision is settled and
 the chosen broker moves into `apps/deliveroo-node/compose.yaml`.
 

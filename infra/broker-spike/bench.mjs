@@ -1,6 +1,6 @@
 // Kafka vs RabbitMQ, measured on the workload this repo will actually have:
 // an outbox relay draining rows in batches of 100 (see the Q4 discussion and
-// docs/superpowers/specs/2026-09-14-broker-kafka-vs-rabbitmq.md).
+// docs/decisions/0007-broker-kafka-vs-rabbitmq.md).
 //
 //   node bench.mjs kafka
 //   node bench.mjs rabbit

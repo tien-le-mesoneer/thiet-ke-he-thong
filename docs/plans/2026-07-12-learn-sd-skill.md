@@ -4,7 +4,7 @@
 
 **Goal:** Build the project-local `/learn-sd` skill that drives the 16-week system-design study plan — weekly agenda + reading quiz, grounded Q&A from the NotebookLM notebook, and timed design-exercise coaching — with progress tracked in-repo and build checks verified by real tools.
 
-**Architecture:** A single `SKILL.md` router (frontmatter, startup, mode dispatch, slippage rule, progress schema) plus three focused reference files, one per sub-mode (`this-week`, `ask`, `exercise`). State lives in `docs/system-design-progress.md`. The skill shells out to the installed `notebooklm` CLI (always with the explicit notebook id) and verifies build criteria via CodeGraph/grep/test/git against the active implementation's acceptance manifest.
+**Architecture:** A single `SKILL.md` router (frontmatter, startup, mode dispatch, slippage rule, progress schema) plus three focused reference files, one per sub-mode (`this-week`, `ask`, `exercise`). State lives in `docs/study/progress.md`. The skill shells out to the installed `notebooklm` CLI (always with the explicit notebook id) and verifies build criteria via CodeGraph/grep/test/git against the active implementation's acceptance manifest.
 
 **Tech Stack:** Markdown skill (Claude Code project skill), `notebooklm` CLI, CodeGraph MCP (`codegraph_*`), ripgrep, git. The practice app it inspects is `apps/deliveroo-node` (Node/TS + Fastify + Postgres).
 
@@ -13,9 +13,9 @@
 Copy these verbatim wherever the skill references them:
 
 - `NOTEBOOK_ID = 173bf885-0641-4c53-b965-f2e910b68768` — every `notebooklm` call passes `--notebook 173bf885-0641-4c53-b965-f2e910b68768` (or `-n` for `wait`/`download`), never `notebooklm use`.
-- `PROGRESS_FILE = docs/system-design-progress.md`
-- `PLAN_DETAIL = docs/system-design-plan-detailed.md` (week-by-week syllabus)
-- `ACCEPTANCE = docs/system-design-acceptance.md` (concept-level checks with stable IDs)
+- `PROGRESS_FILE = docs/study/progress.md`
+- `PLAN_DETAIL = docs/study/plan-detailed.md` (week-by-week syllabus)
+- `ACCEPTANCE = docs/study/acceptance.md` (concept-level checks with stable IDs)
 - `MANIFEST = apps/<active_impl>/acceptance.<lang>.md` (concept ID → concrete check)
 - Skill location: `.claude/skills/learn-sd/` — **project-only**, never global.
 - Auth gate (all modes): `notebooklm auth check --test --json` must return `status: ok` AND `checks.token_fetch: true`; otherwise stop and instruct `notebooklm login`.
@@ -48,7 +48,7 @@ Copy these verbatim wherever the skill references them:
 
 - [ ] **Step 1: Define the dry-run scenario (the "test")**
 
-Scenario A (fresh start): user invokes `/learn-sd` with no `docs/system-design-progress.md` present. Expected: skill (1) runs the auth check, (2) bootstraps the progress file with `plan_week: 1`, `elapsed_week: 1`, `phase: 1`, `active_impl: node`, `started: 2026-07-12`, empty `exercises_done`/`weak_concepts`, empty `## Log`, then (3) dispatches to `this-week`.
+Scenario A (fresh start): user invokes `/learn-sd` with no `docs/study/progress.md` present. Expected: skill (1) runs the auth check, (2) bootstraps the progress file with `plan_week: 1`, `elapsed_week: 1`, `phase: 1`, `active_impl: node`, `started: 2026-07-12`, empty `exercises_done`/`weak_concepts`, empty `## Log`, then (3) dispatches to `this-week`.
 Scenario B (routing): `/learn-sd ask "x"` → `references/ask.md`; `/learn-sd exercise` → `references/exercise.md`; `/learn-sd` or `/learn-sd this-week` → `references/this-week.md`.
 
 - [ ] **Step 2: Confirm the behavior is absent**
@@ -68,21 +68,21 @@ description: Drive the 16-week system-design study plan in this repo — weekly 
 
 # learn-sd — system-design study driver
 
-Runs the study plan in `docs/system-design-learning-plan.md` +
-`docs/system-design-plan-detailed.md`. Three sub-modes; pick by argument.
+Runs the study plan in `docs/study/learning-plan.md` +
+`docs/study/plan-detailed.md`. Three sub-modes; pick by argument.
 
 ## Constants
 
 - NOTEBOOK_ID: `173bf885-0641-4c53-b965-f2e910b68768` — pass `--notebook 173bf885-0641-4c53-b965-f2e910b68768` on every `notebooklm` call. Never `notebooklm use`.
-- Progress: `docs/system-design-progress.md`
-- Syllabus: `docs/system-design-plan-detailed.md`
-- Acceptance (concepts): `docs/system-design-acceptance.md`
+- Progress: `docs/study/progress.md`
+- Syllabus: `docs/study/plan-detailed.md`
+- Acceptance (concepts): `docs/study/acceptance.md`
 - Manifest: `apps/<active_impl>/acceptance.<lang>.md`
 
 ## Startup — run on EVERY invocation before anything else
 
 1. **Auth gate.** Run `notebooklm auth check --test --json`. Require `status: "ok"` AND `checks.token_fetch: true`. If either fails, tell the user to run `notebooklm login` and STOP — do not proceed.
-2. **Read progress.** Read `docs/system-design-progress.md`. If it does not exist, bootstrap it (see Progress schema) with `plan_week: 1`, `elapsed_week: 1`, `phase: 1`, `active_impl: node`, `started: <today's date>`, empty lists, empty log. Announce that you created it.
+2. **Read progress.** Read `docs/study/progress.md`. If it does not exist, bootstrap it (see Progress schema) with `plan_week: 1`, `elapsed_week: 1`, `phase: 1`, `active_impl: node`, `started: <today's date>`, empty lists, empty log. Announce that you created it.
 3. **Dispatch** on the argument:
    - none or `this-week` → follow `references/this-week.md`
    - `ask "<question>"` → follow `references/ask.md`
@@ -91,7 +91,7 @@ Runs the study plan in `docs/system-design-learning-plan.md` +
 
 ## Progress schema
 
-`docs/system-design-progress.md`:
+`docs/study/progress.md`:
 
 ```markdown
 ---
@@ -147,7 +147,7 @@ git commit -m "feat(learn-sd): scaffold skill router, startup gate, progress sch
 - [ ] **Step 1: Define the dry-run scenario (the "test")**
 
 Scenario (real, checkable): `active_impl: node`, `plan_week: 2`. The build check for Week 2 must:
-- load Week 2 concepts from `docs/system-design-acceptance.md` (`W2.state-machine`, `W2.enforced`, `W2.tests-exist`, `W2.flow`, `W2.recall`),
+- load Week 2 concepts from `docs/study/acceptance.md` (`W2.state-machine`, `W2.enforced`, `W2.tests-exist`, `W2.flow`, `W2.recall`),
 - load `apps/deliveroo-node/acceptance.node.md`,
 - run each concrete check and produce a green/red list where **`W2.state-machine` is GREEN** (`canTransition`/`TRANSITIONS` exist in `apps/deliveroo-node/src/modules/orders/service.ts`) and **`W2.enforced` is RED** (`placeOrder` sets statuses directly), **`W2.tests-exist` RED** (no `test/` dir), and `W2.recall` is asked, not gated.
 
@@ -167,7 +167,7 @@ Assumes startup already passed auth and read progress.
 
 ## 1. Orient
 
-Read `plan_week`, `elapsed_week`, `active_impl`, `weak_concepts` from `docs/system-design-progress.md`. Compute `slippage = elapsed_week - plan_week`. Read the `plan_week` block (Read / Build / Exercise) from `docs/system-design-plan-detailed.md`.
+Read `plan_week`, `elapsed_week`, `active_impl`, `weak_concepts` from `docs/study/progress.md`. Compute `slippage = elapsed_week - plan_week`. Read the `plan_week` block (Read / Build / Exercise) from `docs/study/plan-detailed.md`.
 
 ## 2. Present the agenda
 
@@ -182,7 +182,7 @@ Score verbally. Update `weak_concepts`: append clearly-missed topics, remove one
 
 ## 4. Build check (the alignment gate)
 
-1. From `docs/system-design-acceptance.md`, take this week's concept IDs.
+1. From `docs/study/acceptance.md`, take this week's concept IDs.
 2. Load `apps/<active_impl>/acceptance.<lang>.md` (for `node`: `apps/deliveroo-node/acceptance.node.md`).
 3. For each concept, run the concrete check by its type and mark GREEN only if the tool confirms it:
    - `codegraph` → `codegraph_search` / `codegraph_callers` / `codegraph_impact` for the named symbol/edge.
@@ -276,11 +276,11 @@ git commit -m "feat(learn-sd): add grounded ask mode with repo tie-in"
 
 **Interfaces:**
 - Consumes: startup contract; `plan_week` (to pick the exercise topic), `weak_concepts`, `exercises_done`.
-- Produces: `docs/exercises/<plan_week>-<topic>.md` (committed); updates `exercises_done` and `weak_concepts`.
+- Produces: `docs/study/exercises/<plan_week>-<topic>.md` (committed); updates `exercises_done` and `weak_concepts`.
 
 - [ ] **Step 1: Define the dry-run scenario (the "test")**
 
-Scenario: `plan_week: 1`, `/learn-sd exercise`. Expected: topic resolves to "URL shortener" (Week 1 exercise in the plan), the procedure runs a 45-minute cold attempt with no help during, then grades against the notebook using the plan's template, writes `docs/exercises/1-url-shortener.md` with the attempt + gap analysis, commits it, and updates progress.
+Scenario: `plan_week: 1`, `/learn-sd exercise`. Expected: topic resolves to "URL shortener" (Week 1 exercise in the plan), the procedure runs a 45-minute cold attempt with no help during, then grades against the notebook using the plan's template, writes `docs/study/exercises/1-url-shortener.md` with the attempt + gap analysis, commits it, and updates progress.
 
 - [ ] **Step 2: Confirm the behavior is absent**
 
@@ -296,7 +296,7 @@ Create the file with exactly this content:
 
 Assumes startup already passed auth and read progress. Usage: `/learn-sd exercise`.
 
-1. **Pick the topic.** From `docs/system-design-plan-detailed.md`, take the current `plan_week`'s Exercise (e.g. Week 1 → URL shortener, Week 2 → rate limiter, Week 3 → pastebin, Week 4 → distributed key-value store). Confirm the topic with the user; let them override.
+1. **Pick the topic.** From `docs/study/plan-detailed.md`, take the current `plan_week`'s Exercise (e.g. Week 1 → URL shortener, Week 2 → rate limiter, Week 3 → pastebin, Week 4 → distributed key-value store). Confirm the topic with the user; let them override.
 
 2. **Timed cold attempt.** Tell the user this is a 45-minute interview-style attempt and note the start time. They write their design here in chat or in a scratch file. Do **not** help, hint, or answer questions about the problem during the attempt — only clarify the format. Collect their attempt when they say done (or at 45 min).
 
@@ -304,15 +304,15 @@ Assumes startup already passed auth and read progress. Usage: `/learn-sd exercis
    `notebooklm ask "Give the reference solution and the commonly-missed points for designing <topic>, structured as: requirements, capacity estimates, API, data model, high-level design, deep dive, bottlenecks & trade-offs." --notebook 173bf885-0641-4c53-b965-f2e910b68768`
    Produce a **gap analysis** comparing their attempt to the reference, section by section using that same template. Be specific about what they missed.
 
-4. **Write the deliverable.** Create `docs/exercises/<plan_week>-<topic>.md` containing: the topic, date, their attempt (verbatim), and the gap analysis. Then commit:
-   `git add docs/exercises/<plan_week>-<topic>.md && git commit -m "docs(exercise): week <plan_week> <topic> attempt + gap analysis"`
+4. **Write the deliverable.** Create `docs/study/exercises/<plan_week>-<topic>.md` containing: the topic, date, their attempt (verbatim), and the gap analysis. Then commit:
+   `git add docs/study/exercises/<plan_week>-<topic>.md && git commit -m "docs(exercise): week <plan_week> <topic> attempt + gap analysis"`
 
 5. **Update progress.** Add `<topic>` to `exercises_done`; append clearly-missed items to `weak_concepts`; add a dated `## Log` line. These weak concepts now weight future quizzes and tutoring.
 ````
 
 - [ ] **Step 4: Verify the procedure traces correctly**
 
-Trace the Scenario: confirm topic resolution reads `plan_week` from the plan doc, the attempt phase forbids assistance, the grading command carries `--notebook 173bf885-0641-4c53-b965-f2e910b68768`, the deliverable path is `docs/exercises/<plan_week>-<topic>.md`, and progress updates touch `exercises_done` + `weak_concepts`.
+Trace the Scenario: confirm topic resolution reads `plan_week` from the plan doc, the attempt phase forbids assistance, the grading command carries `--notebook 173bf885-0641-4c53-b965-f2e910b68768`, the deliverable path is `docs/study/exercises/<plan_week>-<topic>.md`, and progress updates touch `exercises_done` + `weak_concepts`.
 
 - [ ] **Step 5: Commit**
 
@@ -372,7 +372,7 @@ git commit -m "docs: register /learn-sd trigger in project instructions"
 
 ## Self-Review
 
-**Spec coverage** (against `docs/superpowers/specs/2026-07-12-learn-sd-skill-design.md`):
+**Spec coverage** (against `docs/specs/2026-07-12-learn-sd-skill-design.md`):
 - Three sub-modes → Tasks 2 (this-week), 3 (ask), 4 (exercise). ✓
 - Startup auth gate + progress bootstrap → Task 1. ✓
 - Component 1 progress state incl. `active_impl` → Task 1 schema. ✓
@@ -380,7 +380,7 @@ git commit -m "docs: register /learn-sd trigger in project instructions"
 - Slippage rule (`elapsed_week` vs `plan_week`) → Task 1 (statement) + Task 2 (application). ✓
 - Explicit `--notebook` id everywhere, no `notebooklm use` → Global Constants + Tasks 2–4 commands. ✓
 - Repo tie-in for `ask` → Task 3. ✓
-- Exercise deliverable `docs/exercises/<planweek>-<topic>.md` committed → Task 4. ✓
+- Exercise deliverable `docs/study/exercises/<planweek>-<topic>.md` committed → Task 4. ✓
 - Monorepo manifest indirection (`apps/<impl>/acceptance.<lang>.md`) → Task 2. ✓
 - Project-only skill location → Task 1 file path + Task 5 trigger. ✓
 - Error handling (auth stale, notebook failure, no progress file) → Task 1 startup + Task 3 step 1. ✓

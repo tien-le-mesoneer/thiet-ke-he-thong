@@ -12,19 +12,21 @@ Plain directories + git.
 ## Layout
 
 ```
-docs/                              # shared, language-agnostic
-  system-design-learning-plan.md   #   the syllabus (overview)
-  system-design-plan-detailed.md   #   week-by-week detail
-  system-design-acceptance.md      #   concept-level definition-of-done
-  system-design-progress.md        #   your progress (created by /learn-sd)
-  exercises/                       #   timed design-exercise write-ups
+docs/                              # index: docs/README.md
+  architecture/                    #   diagrams of the system as it is today
+  decisions/                       #   ADRs, one decision per file
+  specs/  plans/                   #   design docs and their implementation plans
+  operations/                      #   SLOs, runbook, postmortems
+  roadmap.md                       #   what to improve next, with evidence
+  study/                           #   syllabus, acceptance, progress, notes, exercises
 .claude/skills/learn-sd/           # the study skill (drives the plan)
 apps/
-  deliveroo-node/                  # current implementation (TS + Fastify + Postgres)
+  url-shortener-node/              # Fastify + Mongo + Redis; the observability reference
+  deliveroo-node/                  # modular monolith (TS + Fastify + Postgres)
     acceptance.node.md             #   maps shared concepts → concrete Node checks
-  deliveroo-go/                    # future
-  deliveroo-java/                  # future
-packages/                          # (later) shared contracts: openapi, *.proto, seed data
+infra/
+  observability/                   # OTel Collector + Prometheus + Tempo + Grafana
+  broker-spike/                    # throwaway Kafka vs RabbitMQ benchmark
 ```
 
 ## Working on an implementation
@@ -38,5 +40,5 @@ cd apps/deliveroo-node
 
 Use the `learn-sd` skill: `/learn-sd` (this week), `/learn-sd ask "…"`,
 `/learn-sd exercise`. It tracks which language you're building (`active_impl` in
-`docs/system-design-progress.md`) and checks your code against
+`docs/study/progress.md`) and checks your code against
 `apps/<impl>/acceptance.<lang>.md`.

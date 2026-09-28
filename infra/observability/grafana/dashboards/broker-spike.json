@@ -28,7 +28,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "Evidence for **docs/superpowers/specs/2026-09-14-broker-kafka-vs-rabbitmq.md**. Targets only exist while `infra/broker-spike/compose.yaml` is up and `prometheus-brokers.yml` is in `infra/observability/prometheus/scrape/`.\n\nThe asymmetry is the point: **RabbitMQ's panels come from the broker itself** (`rabbitmq_prometheus`, enabled by default, 231 broker metrics). **Kafka's come from a `kafka-exporter` sidecar** that exposes 16 — broker internals (heap, GC, request queues) would need a second mechanism, the JMX exporter."
+        "content": "Evidence for **docs/decisions/0007-broker-kafka-vs-rabbitmq.md**. Targets only exist while `infra/broker-spike/compose.yaml` is up and `prometheus-brokers.yml` is in `infra/observability/prometheus/scrape/`.\n\nThe asymmetry is the point: **RabbitMQ's panels come from the broker itself** (`rabbitmq_prometheus`, enabled by default, 231 broker metrics). **Kafka's come from a `kafka-exporter` sidecar** that exposes 16 — broker internals (heap, GC, request queues) would need a second mechanism, the JMX exporter."
       }
     },
     {

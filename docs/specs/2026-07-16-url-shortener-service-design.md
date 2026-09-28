@@ -7,7 +7,7 @@
 ## Purpose
 
 A standalone URL-shortener service, built as hands-on reinforcement of the Week-1
-design exercise ([docs/exercises/1-url-shortener.md](../../exercises/1-url-shortener.md))
+design exercise ([docs/study/exercises/1-url-shortener.md](../study/exercises/1-url-shortener.md))
 and a deliberate, full-scale practice of the **scalability** and
 **maintainability** principles from DDIA ch. 1. It shortens long URLs to ~7-char
 codes, redirects on lookup, and tracks click counts. Future use: shortening

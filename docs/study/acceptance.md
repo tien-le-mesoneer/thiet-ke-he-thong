@@ -8,11 +8,11 @@ concrete check (a grep pattern, a codegraph symbol, a test command) for that
 language.
 
 The `learn-sd` skill, in its `this-week` build step, reads `active_impl` from
-`system-design-progress.md`, loads the matching manifest, and runs each concept's
+`progress.md`, loads the matching manifest, and runs each concept's
 concrete check — showing a green/red list. A week's `plan_week` advances only
 when its non-`self` concepts are green (or you explicitly override).
 
-Companion to `system-design-plan-detailed.md` (the syllabus). The plan says what
+Companion to `plan-detailed.md` (the syllabus). The plan says what
 to build; this file says *which concepts prove it was built*; the manifest says
 *how to check them in language X*.
 

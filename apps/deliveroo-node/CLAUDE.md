@@ -20,7 +20,7 @@ npm test   # runs against deliveroo_test, never the dev database
 Earlier along than `url-shortener-node`. Week-1 acceptance and Week-2
 (`W2.enforced`, `W2.tests-exist`, `W2.flow`) are green; Week 3 is next — the
 stock race condition in `placeOrder` is still deliberately open. Concepts and
-checks live in `acceptance.node.md` and `docs/system-design-acceptance.md`,
+checks live in `acceptance.node.md` and `docs/study/acceptance.md`,
 driven by `/learn-sd`.
 
 Not yet instrumented. The observability spec plans an OTel preload here once the

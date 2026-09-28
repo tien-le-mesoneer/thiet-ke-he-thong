@@ -1,14 +1,14 @@
 # learn-sd · note
 
 Capture study notes. They land in **two places**: the git-tracked repo file
-`docs/system-design-notes.md` (fast, greppable, versioned) and the NotebookLM
+`docs/study/notes.md` (fast, greppable, versioned) and the NotebookLM
 notebook as a note (so future `ask`/quizzes can ground on them). Assumes startup
 already passed auth and read progress.
 
 Usage:
 - `/learn-sd note "<text>"` — save a freeform note.
 - `/learn-sd note` — no text: ask the user what to capture, then proceed.
-- `/learn-sd note list` — show recent notes (read `docs/system-design-notes.md`, list the last ~10 headings; do not query NotebookLM).
+- `/learn-sd note list` — show recent notes (read `docs/study/notes.md`, list the last ~10 headings; do not query NotebookLM).
 
 ## Save flow (`note "<text>"` / `note`)
 
@@ -17,7 +17,7 @@ Usage:
    - **Body** — the note text, lightly cleaned up (keep the user's wording; don't invent content).
    - **Metadata** — today's date, current `plan_week`, `active_impl`, a `source` tag (`manual` here; other modes pass their own — see Auto-capture), and optional topic tags you infer from the text.
 
-2. **Append to the repo file.** Append this block to `docs/system-design-notes.md` (create the file with an `# Study notes` H1 if missing). Newest entries go at the **bottom** (chronological, clean diffs):
+2. **Append to the repo file.** Append this block to `docs/study/notes.md` (create the file with an `# Study notes` H1 if missing). Newest entries go at the **bottom** (chronological, clean diffs):
 
    ```markdown
    ## <YYYY-MM-DD> · <title>

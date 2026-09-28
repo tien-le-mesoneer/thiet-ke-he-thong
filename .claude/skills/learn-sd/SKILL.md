@@ -5,22 +5,22 @@ description: Drive the 16-week system-design study plan in this repo — weekly 
 
 # learn-sd — system-design study driver
 
-Runs the study plan in `docs/system-design-learning-plan.md` +
-`docs/system-design-plan-detailed.md`. Three sub-modes; pick by argument.
+Runs the study plan in `docs/study/learning-plan.md` +
+`docs/study/plan-detailed.md`. Three sub-modes; pick by argument.
 
 ## Constants
 
 - NOTEBOOK_ID: `173bf885-0641-4c53-b965-f2e910b68768` — pass `--notebook 173bf885-0641-4c53-b965-f2e910b68768` on every `notebooklm` call. Never `notebooklm use`.
-- Progress: `docs/system-design-progress.md`
-- Notes: `docs/system-design-notes.md`
-- Syllabus: `docs/system-design-plan-detailed.md`
-- Acceptance (concepts): `docs/system-design-acceptance.md`
+- Progress: `docs/study/progress.md`
+- Notes: `docs/study/notes.md`
+- Syllabus: `docs/study/plan-detailed.md`
+- Acceptance (concepts): `docs/study/acceptance.md`
 - Manifest: `apps/<active_impl>/acceptance.<lang>.md`
 
 ## Startup — run on EVERY invocation before anything else
 
 1. **Auth gate.** Run `notebooklm auth check --test --json`. Require `status: "ok"` AND `checks.token_fetch: true`. If either fails, tell the user to run `notebooklm login` and STOP — do not proceed.
-2. **Read progress.** Read `docs/system-design-progress.md`. If it does not exist, bootstrap it (see Progress schema) with `plan_week: 1`, `elapsed_week: 1`, `phase: 1`, `active_impl: node`, `started: <today's date>`, empty lists, empty log. Announce that you created it.
+2. **Read progress.** Read `docs/study/progress.md`. If it does not exist, bootstrap it (see Progress schema) with `plan_week: 1`, `elapsed_week: 1`, `phase: 1`, `active_impl: node`, `started: <today's date>`, empty lists, empty log. Announce that you created it.
 3. **Dispatch** on the argument:
    - none or `this-week` → follow `references/this-week.md`
    - `ask "<question>"` → follow `references/ask.md`
@@ -30,7 +30,7 @@ Runs the study plan in `docs/system-design-learning-plan.md` +
 
 ## Progress schema
 
-`docs/system-design-progress.md`:
+`docs/study/progress.md`:
 
 ```markdown
 ---
@@ -56,4 +56,4 @@ Slippage = `elapsed_week - plan_week`. When positive, protect reading + the time
 
 ## Autonomy
 
-Run freely: `notebooklm auth check`, `ask` (without `--save-as-note`), `status`, `list`, `note list`, appending notes to the **repo** file `docs/system-design-notes.md`, and all read-only `codegraph_*`/grep/test checks. Ask first before: `notebooklm note create`, `notebooklm ask … --save-as-note` (any push to the notebook), any `notebooklm delete`, and committing files.
+Run freely: `notebooklm auth check`, `ask` (without `--save-as-note`), `status`, `list`, `note list`, appending notes to the **repo** file `docs/study/notes.md`, and all read-only `codegraph_*`/grep/test checks. Ask first before: `notebooklm note create`, `notebooklm ask … --save-as-note` (any push to the notebook), any `notebooklm delete`, and committing files.

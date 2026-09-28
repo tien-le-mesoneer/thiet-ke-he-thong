@@ -16,8 +16,8 @@ is **designed and awaiting build** (application-wide OpenTelemetry observability
 ### 1. `learn-sd` study skill — DONE, merged
 Project-local skill at `.claude/skills/learn-sd/` driving the study plan.
 - Modes: `/learn-sd` (weekly agenda + reading quiz), `/learn-sd ask "…"` (grounded Q&A from the NotebookLM notebook), `/learn-sd exercise` (timed design exercise + graded gap analysis).
-- Progress tracked in `docs/system-design-progress.md`; build checks verified against `docs/system-design-acceptance.md` + per-impl manifests.
-- Used it for real: Week-1 reading (reliability tutoring) + the URL-shortener design exercise (`docs/exercises/1-url-shortener.md`, graded ~B).
+- Progress tracked in `docs/study/progress.md`; build checks verified against `docs/study/acceptance.md` + per-impl manifests.
+- Used it for real: Week-1 reading (reliability tutoring) + the URL-shortener design exercise (`docs/study/exercises/1-url-shortener.md`, graded ~B).
 
 ### 2. Polyglot monorepo restructure — DONE
 - App moved to `apps/deliveroo-node/`; shared `docs/` at root; `apps/<impl>/acceptance.<lang>.md` manifests. Ready for future Go/Java impls.
@@ -41,7 +41,7 @@ proxy blocks HTTPS — SSH sidesteps both).
 ## 🔶 In progress — Application-wide OpenTelemetry observability
 
 **Design APPROVED, spec committed, implementation NOT started.**
-Spec: `docs/superpowers/specs/2026-07-17-observability-otel-design.md` (commit `bb428d7`).
+Spec: `docs/specs/2026-07-17-observability-otel-design.md` (commit `bb428d7`).
 
 What it will build:
 - `packages/observability-node` — shared OTel bootstrap (auto-instrumentation → traces + RED metrics + pg/mongo/redis client spans + pino `trace_id` correlation), preloaded via `node --import`. Introduces npm **workspaces** at repo root.
@@ -78,12 +78,12 @@ What it will build:
 
 | Path | What |
 |---|---|
-| `docs/system-design-plan-detailed.md` | the week-by-week syllabus |
-| `docs/system-design-acceptance.md` | concept-level definition-of-done |
-| `docs/system-design-progress.md` | your live study progress (git-ignored? no — committed) |
-| `docs/exercises/1-url-shortener.md` | graded design-exercise attempt |
-| `docs/superpowers/specs/` | 3 design specs (learn-sd, url-shortener, observability) |
-| `docs/superpowers/plans/` | 2 impl plans (learn-sd, url-shortener) — observability plan TBD |
+| `docs/study/plan-detailed.md` | the week-by-week syllabus |
+| `docs/study/acceptance.md` | concept-level definition-of-done |
+| `docs/study/progress.md` | your live study progress (git-ignored? no — committed) |
+| `docs/study/exercises/1-url-shortener.md` | graded design-exercise attempt |
+| `docs/specs/` | 3 design specs (learn-sd, url-shortener, observability) |
+| `docs/plans/` | 2 impl plans (learn-sd, url-shortener) — observability plan TBD |
 | `apps/deliveroo-node/` | Phase-1 modular monolith (Postgres) |
 | `apps/url-shortener-node/` | standalone service (Mongo+Redis) + `document.md` |
 | `.claude/skills/learn-sd/` | the study skill |

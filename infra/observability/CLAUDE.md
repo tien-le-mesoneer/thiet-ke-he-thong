@@ -1,7 +1,7 @@
 # infra/observability
 
 Monorepo telemetry stack. Apps run on the **host** and export OTLP; only the
-backends are containerised. Design spec: `docs/superpowers/specs/2026-07-17-observability-otel-design.md`.
+backends are containerised. Design spec: `docs/specs/2026-07-17-observability-otel-design.md`.
 
 ```
 app ──OTLP:7318──► Collector ──► Tempo ──┐
@@ -82,4 +82,4 @@ codes would otherwise drain a 43-minute budget in minutes.
 
 All five slices done: pipeline, Tempo, OTel metrics + SLI, burn-rate alerts,
 and the 2026-08-30 game-day (which found three real bugs and the availability
-gap now closed above). Details in `README.md` and `gameday.md`.
+gap now closed above). Details in `README.md` and the [game-day postmortem](../../docs/operations/postmortems/2026-08-30-redis-gameday.md).

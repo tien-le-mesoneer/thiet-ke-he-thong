@@ -1,6 +1,6 @@
 # Acceptance manifest — deliveroo-node
 
-Maps the language-agnostic concept IDs in `docs/system-design-acceptance.md` to
+Maps the language-agnostic concept IDs in `docs/study/acceptance.md` to
 concrete checks for this Node/TypeScript implementation. The `learn-sd` skill
 loads this file when `active_impl: node`.
 

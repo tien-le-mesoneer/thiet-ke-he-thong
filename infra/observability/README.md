@@ -1,7 +1,7 @@
 # Observability stack
 
 Monorepo-wide telemetry backend. Implements
-[the OTel design spec](../../docs/superpowers/specs/2026-07-17-observability-otel-design.md).
+[the OTel design spec](../../docs/specs/2026-07-17-observability-otel-design.md).
 
 **Services run on the host; only the backends are containerised.** Apps export
 OTLP to `localhost:7318`, the Collector fans out from there.
@@ -193,7 +193,7 @@ recently" — it is immune to both the reset and the stale series.
 | 3 — prom-client → OTel metrics + latency histogram w/ 50 ms bucket | ✅ done |
 | 2 — Tempo; traces visible in Grafana | ✅ done |
 | 4 — SLI recording rule + multi-window burn-rate alert + SLO dashboard | ✅ done |
-| 5 — k6 load + game-day (kill Redis) | ✅ done — found 3 bugs, see `gameday.md` |
+| 5 — k6 load + game-day (kill Redis) | ✅ done — found 3 bugs, see [postmortem](../../docs/operations/postmortems/2026-08-30-redis-gameday.md) |
 
 Slice 3 jumped ahead of slice 2 deliberately: once traces proved lossy under
 load, the metric path became the one the SLI depends on, and Tempo is only

@@ -3,7 +3,7 @@
 **Date:** 2026-09-14
 **Status:** Proposed — decision recorded below, awaiting confirmation
 **Scope:** `apps/deliveroo-node` Week 7 (transactional outbox + event-driven notifications), and everything downstream of it in Phase 2–3.
-**Supersedes:** the unjustified "Add **Kafka** (or NATS JetStream)" in `docs/system-design-plan-detailed.md:50`.
+**Supersedes:** the unjustified "Add **Kafka** (or NATS JetStream)" in `docs/study/plan-detailed.md:50`.
 
 ## Purpose
 
