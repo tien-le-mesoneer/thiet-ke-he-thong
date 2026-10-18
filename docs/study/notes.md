@@ -118,3 +118,83 @@ to fill what they are given (Grafana 296 MB uncapped -> 60 MB capped, same work)
 Observed usage tells you a process's appetite, not its requirement. See
 [[measuring-latency-without-fooling-yourself]].
 
+
+## 2026-10-06 · Valkey/Redis Streams: log, consumer group, PEL
+_week 1 · node · source: ask · tags: redis-streams, valkey, consumer-group, at-least-once, idempotency · nb: 0bc7b984-83e6-45d0-9236-64e41a4d65cb_
+
+Học theo Feynman (4 phần + lab trên Valkey 8), xuất phát từ chỗ chỉ biết `SET`/`GET`.
+
+**1. Stream là append-only log.** `SET` ghi đè; `XADD orders * order 42 item pho` thêm
+entry vào cuối, không mất gì. Mỗi entry là một map field/value và có ID
+`<timestamp ms>-<counter>`, tăng dần. ID quan trọng không phải vì "đọc nhanh" mà vì nó
+vừa là **thứ tự** vừa là **bookmark**: reader nhớ last ID rồi `XREAD STREAMS orders <lastId>`.
+Last ID phải lưu ở chỗ sống sót qua crash, không chỉ trong biến của process.
+
+**2. Blocking read.** `XREAD BLOCK 5000 ...` giữ connection và trả về ngay khi có entry
+mới — thay cho polling. `$` = "mới hơn lúc gọi lệnh", chỉ dùng ở lần gọi đầu; dùng `$`
+mọi lần sẽ mất entry được ghi trong lúc đang xử lý giữa hai lần gọi.
+
+**3. Consumer group.** `XREAD` thường không chia việc: 5 worker = mỗi entry xử lý 5 lần
+(tự lưu last ID cũng không cứu, vì mỗi worker chỉ biết chính nó). `XGROUP CREATE orders
+kitchen $ MKSTREAM` + `XREADGROUP GROUP kitchen chef-1 ... STREAMS orders >`. Trong một
+group các consumer **chia nhau** entry; giữa các group, **mỗi group nhận đủ**. `>` =
+"chưa giao cho ai **trong group của tôi**" — không phải "chưa group nào đọc" (lỗi mình mắc).
+Redis nhớ vị trí đọc hộ cả group.
+
+**4. PEL, XACK, crash.** Entry đã giao nhưng chưa `XACK` nằm trong Pending Entries List,
+để không mất khi worker crash. Khôi phục: cùng consumer khởi động lại đọc bằng `0`
+(chỉ trả pending **của chính consumer đó**, không phải cả group); consumer chết hẳn thì
+người khác `XAUTOCLAIM orders kitchen chef-2 10000 0` lấy entry idle quá 10s. Xử lý xong
+rồi mới ack ⇒ **at-least-once** ⇒ code bắt buộc **idempotent** (ack trước = at-most-once).
+
+**Đọc output trong lab.** `XPENDING orders kitchen` = tổng pending, min ID, max ID, số
+pending theo consumer. `XPENDING orders kitchen - + 10` = chi tiết: ID, consumer, idle ms
+(tính từ lần **giao** gần nhất), delivery count. Count cao bất thường = poison message →
+dead-letter stream. `XAUTOCLAIM` trả về cursor (`0-0` = quét hết), entry đã claim, và ID
+đã bị xoá khỏi stream.
+
+**Bài học từ lỗi trong lab.** Lỡ chạy `XADD` hai lần ⇒ hai entry khác ID, cùng nội dung
+`order 42`. Stream không dedupe. Có hai kiểu trùng: cùng entry giao lại (nhận ra bằng entry
+ID / delivery count) và khác entry cùng nghiệp vụ (chỉ nhận ra bằng **business key**).
+Idempotency nên dựa vào business key — khớp với bài 2026-09-16: dedupe theo id của producer,
+không theo id do broker cấp.
+
+## 2026-10-07 · Valkey/Redis Streams: retention + observability
+_week 1 · node · source: ask · tags: redis-streams, valkey, retention, xtrim, consumer-lag, alerting · nb: de4a3572-2237-409f-8cd7-edc10db4aa05_
+
+**Retention.** Stream append-only, `XACK` chỉ gỡ khỏi PEL, KHÔNG xóa entry → không trim thì RAM tăng mãi. Chạm `maxmemory`: `noeviction` → `XADD` lỗi OOM (cứu được); `allkeys-*` → evict nguyên key, mất stream + PEL + group, không ai biết (tệ nhất).
+
+- `MAXLEN N` giữ N mới nhất; `MINID <ms>-0` giữ theo thời gian (ID = ms timestamp, không có TTL per-entry).
+- `~` = "ít nhất N": chỉ xóa nguyên node (~100 entry). Lab: `MAXLEN ~ 3` trên 10 entry không xóa gì; exact còn 3.
+- **Bẫy: trim không nhìn PEL.** Lab: `XTRIM MAXLEN 0` với 2 pending → `XPENDING` vẫn 2 (PEL chỉ lưu ID); `XAUTOCLAIM` trả 2 ID ở phần tử thứ 3 (deleted) → order mất. Consumer phải log/alert phần tử thứ 3.
+- **Quy tắc:** retention ≥ lag tối đa + thời gian recovery + margin. Sai lầm của mình: chọn 2h cho lag 2h + recovery 1h. Cùng hình dạng với GC trap 2026-09-16: thứ xóa dữ liệu phải chờ lâu hơn thứ chậm nhất còn cần nó.
+
+**Observability (`XINFO GROUPS`).** `lag` = chưa giao cho group (→ thêm consumer, nếu chính consumer là bottleneck); `pending` = giao rồi chưa ack (→ `XAUTOCLAIM`, nhưng xem delivery count trước: cao = poison message, không phải crash). Lab: 2 XADD + đọc COUNT 1 → lag 1, pending 1.
+
+- Alert lag theo **thời gian**, không theo số lượng (lag 5000 lúc trưa = 5 phút; lag 50 lúc 3h sáng = 50 phút). Đo tuổi entry **cũ nhất chưa giao**: `lag = 0` → 0; `lag > 0` → `XRANGE orders (<last-delivered-id> + COUNT 1`, lấy `now − ts` (ts = phần ms trước `-` của ID). **Đính chính:** `now − ts(last-delivered-id)` báo động giả khi producer ngừng gửi (đêm không có order).
+- Bắn ở ~50% retention (6h → 3h): nửa còn lại là ngân sách phản ứng — thức dậy, chẩn đoán, scale, và **xả tồn đọng**. Đợi tới 6h = alert bắn đúng lúc dữ liệu bắt đầu bị trim. Ngưỡng chỉnh theo thời gian phản ứng đo được.
+- `lag = 0` ≠ ổn: app crash giữ entry thì lag 0 nhưng pending kẹt → cần cả alert pending.
+- Alert pending: idle > N phút hoặc delivery count > K.
+
+## 2026-10-16 · Valkey/Redis Streams: poison message, idempotent consumer, khi nào không dùng
+_week 1 · node · source: ask · tags: redis-streams, valkey, poison-message, dlq, consumer-idempotency, broker-selection · nb: 4aa27953-5247-4608-b919-4117b5614c62_
+
+**Poison message.** Entry làm chết mọi consumer đọc nó. `XAUTOCLAIM` chữa lỗi do consumer, không chữa lỗi do entry: nó chỉ chuyển entry độc cho người kế tiếp. Dấu hiệu là **delivery count** (cột 4 của `XPENDING`) tăng mãi. Idle không dùng được vì bị reset mỗi lần giao/claim. Lab: 1 XREADGROUP + 2 XAUTOCLAIM → count 3, idle chỉ 9.6s.
+
+- Cách ly: `XRANGE` lấy nội dung → `XADD <stream>:dlq * …fields… orig-id <id> error "…"` → `XACK`. **XADD trước, XACK sau.** Ngược lại thì crash ở giữa là mất order (dual-write).
+- DLQ entry có ID mới → phải lưu `orig-id`. DLQ là hàng chờ cho người: alert `XLEN dlq > 0`, sửa, replay. Replay lại sinh ID mới → consumer phải dedupe theo business key.
+
+**Idempotent consumer** (cuối cùng đã đạt, ở lần thứ 6):
+- Dedupe theo business key, ở **đúng độ mịn của từng side effect** (`(order_id,'stock')`, `(order_id,'ticket')`), INSERT `ON CONFLICT DO NOTHING` **cùng transaction** với side effect. Dedupe cấp order mà commit cùng bước 1 → replay bỏ qua bước 2 chưa làm.
+- `fn` đặt trước transaction dedupe → side effect chạy 2 lần; đặt sau → không bao giờ chạy; cùng transaction → an toàn. Đây là dual-write problem bên trong consumer.
+- Side effect bên ngoài (email, SMS) không chung transaction được: gửi → ghi `(order_id,'sms')` → XACK. Crash giữa gửi và ghi = gửi trùng = **at-least-once**. Nếu provider có idempotency key thì dedupe chuyển sang phía provider.
+- `points = points + 10` là delta → không idempotent → bắt buộc phải dedupe.
+
+**Khi nào không dùng Streams** (Valkey là in-memory DB):
+1. Durability: mặc định chỉ có RDB snapshot; AOF `everysec` vẫn có thể mất khoảng 1s; replication async.
+2. Retention dài tốn RAM, không có compaction. → Kafka.
+3. 1 stream = 1 key = 1 node; muốn shard phải tự làm. → Kafka partitions.
+4. Routing phức tạp. → RabbitMQ.
+5. **Không dùng chung instance với cache:** cache cần `allkeys-lru`, stream cần `noeviction`, mà một instance chỉ có một policy. Đây là lý do ADR 0007 loại Valkey (cache và queue phải ở hai failure domain riêng).
+
+Chọn công cụ: báo bếp trong 1s, 10k/ngày, đã có Valkey riêng → Streams. Giữ 90 ngày để rebuild read model → Kafka (RabbitMQ xóa message sau khi ack; Streams tốn RAM).
