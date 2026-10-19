@@ -198,3 +198,14 @@ _week 1 · node · source: ask · tags: redis-streams, valkey, poison-message, d
 5. **Không dùng chung instance với cache:** cache cần `allkeys-lru`, stream cần `noeviction`, mà một instance chỉ có một policy. Đây là lý do ADR 0007 loại Valkey (cache và queue phải ở hai failure domain riêng).
 
 Chọn công cụ: báo bếp trong 1s, 10k/ngày, đã có Valkey riêng → Streams. Giữ 90 ngày để rebuild read model → Kafka (RabbitMQ xóa message sau khi ack; Streams tốn RAM).
+
+## 2026-10-19 · Stress test: trước, sau, và scale theo gì
+_week 1 · node · source: ask · tags: load-testing, capacity-planning, littles-law, right-sizing, k6 · nb: e0aab6fb-6824-473f-b4c6-69940457938e_
+
+Stress test là một thí nghiệm. **Trước:** SLO pass/fail, baseline lúc không tải, load profile thật (req/s, tỉ lệ đọc/ghi, nhiễu như cache miss và request lỗi), **open model** (bắn theo rate, không chờ response, nếu không hàng đợi bị giữ ngắn giả tạo, DDIA ch.1), và một giả thuyết ghi ra trước ("ở X req/s, Y nghẽn trước"). **Sau:** vẽ throughput và p99 theo tải tăng dần, tìm **knee** (p99 dựng đứng, throughput đi ngang). Lúc đó chỉ **một** resource chạm trần, và chỉ resource đó đáng để dự báo capacity.
+
+- Scale theo bottleneck: app stateless → scale out; DB quá tải vì đọc → cache/replica; DB quá tải vì ghi → scale up rồi mới shard.
+- Little's Law `L = λ × W`: 8,166 req/s × 11.4ms ≈ 93 request đang xử lý. Downstream chậm gấp đôi thì L gấp đôi dù req/s không đổi.
+- Saturation cao mà utilization vừa phải = contention ở pool (tăng pool, chưa cần thêm máy). p99/error tăng mà req/s đứng yên = hết capacity.
+- Right-size bằng cách giảm **đến khi gãy** rồi lùi lại (heap: 50MB crash, 75MB chạy được, chọn 100MB). Idle memory không phải requirement.
+- Áp vào repo: `load/redirect.js` đang dùng `ramping-vus` (closed model) và chỉ gọi một short code (~100% cache hit) → p99 41.65ms là trần của cache path, không phải của cả service.
